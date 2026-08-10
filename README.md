@@ -1,133 +1,201 @@
 # TurkishBankMCP
 
-TurkishBankMCP tamamen açık kaynak bir proje.
+TurkishBankMCP tamamen açık kaynak ve MIT lisanslı bir proje
 
-Türk banka hesaplarını MCP üzerinden Hermes OpenClaw ve benzeri ajanlara bağlamak için yazıldı.
+Şu an direkt Garanti BBVA API Store ile çalışıyor
 
-Amaç basit. Ajan bakiyeni ve hesap hareketlerini okuyabilsin. Günlük ne kadar para girmiş ne kadar çıkmış görebilsin. Harcamaları yorumlayabilsin. Bütçe analizi yapabilsin.
+Arada Kobaküs yok başka aggregator yok direkt Garanti
 
-Bu proje para göndermez. Ödeme başlatmaz. Alışveriş yapmaz. Karttan para çekmez.
+Amaç basit
 
-Kodda bunlara ait bir MCP tool yok.
+Hermes OpenClaw veya başka bir MCP istemcisi hesap bilgini ve hesap hareketlerini okuyabilsin
 
-## Ne okuyabiliyor
+Para gönderme ödeme başlatma EFT kart yönetme satın alma gibi şeyler yok
 
-- banka hesapları
-- güncel bakiye
-- kullanılabilir bakiye
-- bloke bakiye
-- gelen para
-- giden para
-- hesap hareketleri
-- günlük ve tarih aralıklı nakit akışı
+Kodda bunlara ait tool da yok
 
-Kartlara özel endpointler doğrudan ÖHVPS bağlantısında var. Kobaküs'ün public KWAP dokümanı şu an sadece `Accounts` ve `Transactions` çağrılarını yayınlıyor. Bu yüzden Kobaküs providerında kart tool'ları kapalı.
+## Garanti tarafında ne lazım
 
-## En kolay kurulum: Kobaküs
+Garanti Developer Portal hesabı aç
 
-Gerçek banka hesabını bağlamak için projede hazır Kobaküs providerı var.
+Manage -> Applications -> Add Application yolundan yeni app oluştur
 
-Kobaküs KWAP tek endpoint kullanıyor.
+API Management kısmında sadece şunları seç
+
+- Account Information
+- Account Transactions
+
+Başka ödeme transfer tahsilat API'si ekleme
+
+Authentication kısmında callback URL HTTPS ve dışarıdan erişilebilir olmalı
+
+Scope alanına `OOB`
+
+Type alanına `Confidential`
+
+Submit edince `Client ID` ve `Client Secret` geliyor
+
+App önce Pending Approval olur
+
+Garanti onayladıktan sonra canlı isteklere geçebilirsin
+
+OAuth tarafını TurkishBankMCP kendi yapıyor
+
+Garanti'nin resmi token endpointi hazır tanımlı
 
 ```text
-POST https://app.kobakus.com/webservice/BankPaymentList.php
+https://apis.garantibbva.com.tr/auth/oauth/v2/token
 ```
 
-Hesap ve bakiye için:
+`client_credentials` ile token alıyor
+
+Token hiçbir MCP cevabında gösterilmiyor
+
+## Neden endpointleri env içine yazıyoruz
+
+Garanti public sayfasında Account Information ve Account Transactions ürünlerinin varlığını gösteriyor
+
+Ama bu ürünlerin gerçek endpoint path request method ve body şeması login arkasındaki API ekranında görünüyor
+
+O yüzden burada path uydurmuyoruz
+
+Portal sana ne gösteriyorsa aynısını `.env` içine koyuyorsun
+
+Bu daha güvenli ve production için daha doğru
+
+## .env
+
+Önce
+
+```bash
+cp .env.example .env
+```
+
+Sonra
+
+```dotenv
+GARANTI_CLIENT_ID=
+GARANTI_CLIENT_SECRET=
+GARANTI_REDIRECT_URI=https://senin-domainin.com/callback
+
+GARANTI_ACCOUNT_INFORMATION_URL=
+GARANTI_ACCOUNT_INFORMATION_METHOD=
+GARANTI_ACCOUNT_INFORMATION_CONTENT_TYPE=application/json
+GARANTI_ACCOUNT_INFORMATION_BODY_TEMPLATE=
+
+GARANTI_ACCOUNT_TRANSACTIONS_URL=
+GARANTI_ACCOUNT_TRANSACTIONS_METHOD=
+GARANTI_ACCOUNT_TRANSACTIONS_CONTENT_TYPE=application/json
+GARANTI_ACCOUNT_TRANSACTIONS_BODY_TEMPLATE=
+```
+
+Transaction URL veya body içinde şu alanları kullanabilirsin
 
 ```text
-requestMethod=Accounts
+{{accountRef}}
+{{from}}
+{{to}}
+{{direction}}
+{{minAmount}}
+{{maxAmount}}
+{{page}}
+{{pageSize}}
 ```
 
-Hesap hareketleri için:
+Mesela Garanti dokümanı account id ve tarihleri query string içinde istiyorsa URL template kullanırsın
 
-```text
-requestMethod=Transactions
-```
+Body içinde istiyorsa body template kullanırsın
 
-TurkishBankMCP Kobaküs'ün ödeme API'sini kullanmaz. Sadece hesap ve hareket okuma çağrılarını yapar.
+Kod GET ve POST destekliyor
 
-### Kobaküs hesabı nasıl açılıyor
+JSON ve form-urlencoded body destekliyor
 
-Kobaküs sitesinde **Ücretsiz Dene** sayfasına gir.
+## Client Secret dosyada dursun istersen
 
-Formda ad soyad e-posta telefon şirket adı ve birkaç temel bilgi isteniyor. Ürün seçerken **Hesap Hareketleri Görüntüleme** seçmen yeterli.
-
-Formu gönderince demo hesabının hazırlanması gerekiyor. Kobaküs bu sandbox hesabının ücretsiz olduğunu ve kredi kartı istemediğini söylüyor.
-
-Sandbox tarafında test edebilirsin. Canlı KWAP erişiminde gereken `firmCode` `password` ve `channelCode` bilgilerini Kobaküs ekibi veriyor.
-
-Canlı servis için IP tanımı ve servis erişim formu da istenebiliyor.
-
-Bireysel geliştiriciysen şirket alanı biraz kafa karıştırabilir. Kobaküs public dokümanında bireysel geliştirici için ayrı bir kayıt akışı anlatılmıyor. Bu alanda takılırsan destek veya satış ekibine bunun kişisel açık kaynak proje olduğunu söylemek en temiz yol.
-
-### Kobaküs ayarı
-
-`.env`:
+`.env` içine secret yazmak zorunda değilsin
 
 ```dotenv
-BANK_PROVIDER=kobakus
-
-KOBAKUS_FIRM_CODE=
-KOBAKUS_CHANNEL_CODE=
-KOBAKUS_PASSWORD=
+GARANTI_CLIENT_SECRET_FILE=.secrets/garanti-client-secret
 ```
 
-Şifreyi `.env` içine koymak istemezsen dosyadan okutabilirsin.
+Dosya içindeki secret token yenilenirken tekrar okunur
 
-```dotenv
-KOBAKUS_PASSWORD_FILE=.secrets/kobakus-password
-```
+## İlk test
 
-## Doğrudan ÖHVPS
-
-Yetkili YÖS/HBHS veya ÖHVPS uyumlu bir gateway erişimin varsa `ohvps` providerını kullanabilirsin.
-
-```dotenv
-BANK_PROVIDER=ohvps
-OHVPS_SPEC_VERSION=2.0.0
-
-OHVPS_BASE_URL=
-OHVPS_TPP_CODE=
-OHVPS_ASPSP_CODE=
-OHVPS_GATEWAY_TOKEN=
-OHVPS_ACCESS_TOKEN=
-```
-
-Bu yol daha düşük seviyeli. Sertifika rıza token ve kurum erişimi tarafını senin providerın çözmüş olmalı.
-
-Normal bir bireysel banka müşterisinin doğrudan BKM'den API key alması için yapılmış bir akış değil.
-
-## Kurulum
-
-Node.js 22 veya üstü.
+Kurulum
 
 ```bash
 git clone git@github.com:OnurByte/TurkishBankMCP.git
 cd TurkishBankMCP
-
 npm install
 cp .env.example .env
-
 npm run check
 npm run build
 ```
 
-Banka bilgisi olmadan denemek için:
-
-```dotenv
-BANK_PROVIDER=mock
-```
-
-Sonra:
+MCP Inspector aç
 
 ```bash
-npm start
+npm run inspect
 ```
+
+İlk önce
+
+```text
+bank_provider_status
+```
+
+Sonra
+
+```text
+bank_test_connection
+```
+
+Bu sadece OAuth bağlantısını test eder
+
+Başarılıysa
+
+```json
+{
+  "provider": "garanti-api-store",
+  "oauth": "ok",
+  "readOnly": true
+}
+```
+
+görürsün
+
+Access tokenı göstermez
+
+Sonra
+
+```text
+bank_list_accounts
+```
+
+ve
+
+```text
+bank_list_transactions
+```
+
+ile gerçek API'yi test edebilirsin
+
+## MCP tool'ları
+
+```text
+bank_provider_status
+bank_test_connection
+bank_list_accounts
+bank_get_balances
+bank_list_transactions
+```
+
+Hepsi read-only olarak işaretli
 
 ## Hermes
 
-Build aldıktan sonra Hermes configine ekle.
+Build aldıktan sonra
 
 ```yaml
 mcp_servers:
@@ -137,135 +205,102 @@ mcp_servers:
       - "/absolute/path/to/TurkishBankMCP/dist/index.js"
 ```
 
-Sonra Hermes'e mesela şunu diyebilirsin:
+Sonra mesela
 
 ```text
-Her gün akşam hesap hareketlerime bak.
-Bugün toplam ne kadar para geldi ne kadar çıktı söyle.
-Son 7 günle kıyasla.
-Dikkat çeken harcamaları yaz.
-Bana kısa bir bütçe özeti çıkar.
-Hiçbir finansal işlem yapma.
+Bugünkü hesap hareketlerime bak
+ne kadar para geldi ne kadar çıktı söyle
+tekrarlayan harcamaları bul
+bana kısa bir finans özeti çıkar
+hiçbir finansal işlem yapma
 ```
 
-Cron tarafını Hermes veya kullandığın agent runtime yönetir. MCP sadece veriyi okur.
+diyebilirsin
 
-## MCP tool'ları
+Şu an Garanti response şeması public dokümanda yayınlanmadığı için MCP bankadan gelen Account Information ve Account Transactions cevabını bozmadan döndürüyor
 
-```text
-bank_provider_status
-bank_list_accounts
-bank_get_balances
-bank_list_transactions
-bank_cashflow_summary
-bank_daily_cashflow
-bank_monthly_cashflow
-bank_list_cards
-bank_list_card_transactions
-bank_card_spending_summary
-```
-
-Bütün tool'lar read-only olarak işaretli.
-
-Kobaküs kullanırken hesap ve nakit akışı tool'ları çalışır. Kartla ilgili tool'lar public KWAP sözleşmesinde kart endpointi olmadığı için açık hata döner.
-
-Doğrudan ÖHVPS providerında kart tool'ları da kullanılabilir.
-
-## Sıkça sorulan sorular
-
-### Bu proje ücretli mi
-
-Hayır. TurkishBankMCP tamamen açık kaynak ve MIT lisanslı. İndirip değiştirebilir kendi sunucunda çalıştırabilirsin. Kullandığın banka veri sağlayıcısının ayrıca ücreti olabilir.
-
-### Banka şifremi yapay zeka görüyor mu
-
-Hayır. MCP banka şifreni veya API credential bilgilerini tool cevabında ajana göndermez. Secret bilgiler `.env` veya ayrı secret dosyalarında tutulur.
-
-### Yapay zeka hesabımdan para harcayabilir mi
-
-Bu proje üzerinden hayır. Para gönderme ödeme yapma satın alma veya kart yönetme tool'u yok. Proje bilerek read-only tasarlandı.
-
-### Banka bilgilerim internete açık mı oluyor
-
-Hayır. MCP'yi kendi bilgisayarında veya kendi sunucunda çalıştırabilirsin. Yine de `.env` ve cache dosyaları hassas veri içerir. Bunları public paylaşmamak gerekir.
-
-### Her bankaya ayrı ayrı entegrasyon mu yazmam gerekiyor
-
-Hayır. Provider tarafı bunu soyutlamak için var. Kobaküs veya ÖHVPS uyumlu bir bağlantı üzerinden desteklenen hesapları aynı MCP tool'larıyla kullanabilirsin.
-
-### Gerçek banka hesabı bağlamadan deneyebilir miyim
-
-Evet. Projede `mock` provider var. Gerçek hesap veya API bilgisi olmadan MCP'nin nasıl çalıştığını deneyebilirsin. Kobaküs tarafında da ücretsiz sandbox bulunuyor.
-
-### Hermes veya OpenClaw şart mı
-
-Hayır. Bunlar sadece örnek. Stdio MCP destekleyen başka bir ajan veya istemci de TurkishBankMCP'yi kullanabilir.
-
-### Her gün otomatik kontrol ettirebilir miyim
-
-Evet. Ajan tarafında cron veya zamanlanmış görev oluşturabilirsin. Mesela her akşam o gün gelen ve giden parayı özetletebilirsin. MCP sadece veriyi sağlar.
-
-### Veriler bir yerde saklanıyor mu
-
-API limitlerini gereksiz yere tüketmemek için disk cache kullanılabiliyor. Varsayılan klasör `.data` ve Git'e eklenmiyor. İstersen cache'i kapatabilirsin.
-
-### Projeye katkı verebilir miyim
-
-Tabii. Proje tamamen açık kaynak. Bug fix yeni provider test dokümantasyon veya başka bir geliştirme için katkı gönderebilirsin.
-
-## Kobaküs tarafında yaptığımız şey
-
-Kobaküs public API referansı işlem sorgularında varsayılan olarak 1000 kayıt döndüğünü ve sorguların küçük tarih aralıklarıyla yapılmasını öneriyor.
-
-TurkishBankMCP uzun tarih aralıklarını kendi içinde 7 günlük parçalara böler. Sonuçları tek liste haline getirir. Aynı sorguları gereksiz yere tekrar atmamak için disk cache kullanır.
-
-Bir istek 1000 kayda dayanırsa sonuçta uyarı verir. Böylece eksik hareket varmış gibi sessizce davranmaz.
-
-Kobaküs public dokümanı transaction response alanlarının tam listesini yayınlamıyor. Provider bu yüzden bilinen standart alan adlarını normalize eder. Canlı response güvenli şekilde eşleşmezse yanlış nakit akışı hesaplamak yerine hata verir ve gördüğü alan adlarını söyler. Değerleri veya API şifresini hata mesajına koymaz.
-
-## ÖHVPS limitleri
-
-Doğrudan ÖHVPS providerında sorgu limitlerini korumak için kalıcı cache var.
-
-Hesap listesi ve işlem sorguları gereksiz yere tekrar bankaya gitmez. 429 ve geçici 5xx cevaplarında kontrollü retry yapılır.
-
-Cache dosyası varsayılan olarak:
-
-```text
-.data/cache.json
-```
-
-Bu dosya banka verisi içerir ve Git'e eklenmez.
-
-## Docker
-
-```bash
-docker build -t turkish-bank-mcp .
-
-docker run --rm -i \
-  --env-file .env \
-  -v "$PWD/.data:/app/.data" \
-  turkish-bank-mcp
-```
+İlk gerçek response geldiğinde normalizerı o gerçek şemaya göre sabitlemek daha doğru
 
 ## Güvenlik
 
-`.env` Git'e girmez.
+Portal app'ine sadece Account Information ve Account Transactions yetkisi ver
 
-`.secrets` Git'e girmez.
+Client Secret ve token MCP tool çıktısına girmez
 
-MCP cevaplarında API şifresi token veya credential dönmez.
+401 gelirse token bir kere otomatik yenilenir
 
-TurkishBankMCP içinde ödeme transfer veya satın alma tool'u yok.
+429 ve geçici 5xx hatalarında kontrollü retry var
 
-Aynı makinede ajana sınırsız shell ve filesystem yetkisi verirsen o ayrı konu. Böyle bir ajan teorik olarak `.env` dosyasını kendi shell tool'u üzerinden okuyabilir. MCP'nin read-only olması başka tool'ların yetkisini kısıtlamaz.
+Endpoint URL'sinde transfer payment EFT tahsilat kredi kart yönetimi gibi ifadeler varsa config güvenlik için reddedilir
+
+TurkishBankMCP içinde ödeme veya transfer tool'u yok
+
+Hermes'e ayrıca sınırsız shell ve filesystem yetkisi verirsen o ayrı güvenlik sınırı
+
+## Sıkça sorulan sorular
+
+### Bu proje ücretsiz mi
+
+Evet proje tamamen açık kaynak ve ücretsiz
+
+Garanti API Store'un canlı kullanım şartları ise Garanti'nin onayına bağlı
+
+### Banka şifremi girmem gerekiyor mu
+
+Hayır bu entegrasyon internet bankacılığı şifresiyle çalışmıyor
+
+Developer Portal üzerinden verilen Client ID ve Client Secret kullanılıyor
+
+### AI para gönderebilir mi
+
+Bu MCP üzerinden hayır
+
+Ödeme transfer EFT veya kart yönetim tool'u yok
+
+### Token Hermes'e gider mi
+
+Hayır
+
+Token sadece provider içinde kullanılıyor
+
+### Neden endpoint URL'sini kendim yazıyorum
+
+Çünkü Garanti ürün endpointlerini ve request şemasını portal içindeki API dokümanında gösteriyor
+
+Public sayfada bunların path'i yayınlanmıyor
+
+### Callback URL şart mı
+
+Garanti'nin kendi FAQ dokümanına göre evet
+
+HTTPS ve dışarıdan erişilebilir olmalı
+
+### Önce sadece OAuth test edebilir miyim
+
+Evet `bank_test_connection` bunun için var
+
+### App'e başka Garanti API'leri ekleyebilir miyim
+
+Bu proje için ekleme
+
+Sadece Account Information ve Account Transactions seçmek en güvenlisi
+
+### Response neden normalize edilmiyor
+
+Garanti'nin gerçek response şemasını görmeden alan adı uydurmak istemiyoruz
+
+İlk canlı veya sandbox response ile normalizer eklenebilir
+
+### Projeye katkı verebilir miyim
+
+Tabii
+
+Repo açık kaynak
 
 ## Kaynaklar
 
-- Kobaküs ücretsiz dene: https://kobakus.com/ucretsiz-dene/
-- Kobaküs KWAP API: https://kobakus.com/en/api-dokumantasyon/
-- Kobaküs geliştirici sayfası: https://kobakus.com/gelistiriciler/
-- ÖHVPS: https://ohvps.github.io/v2.0.0/
+- Garanti API Developer Portal: https://developers.garantibbva.com.tr/
+- Garanti API Store FAQ: https://developers.garantibbva.com.tr/pages/SSS.html
 
 ## Lisans
 
