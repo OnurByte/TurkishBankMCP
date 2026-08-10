@@ -65,12 +65,12 @@ function dayRange(date: string, utcOffset: string) {
 }
 
 function createServer(): McpServer {
-  const server = new McpServer({ name: "TurkishBankMCP", version: "0.2.0" });
+  const server = new McpServer({ name: "TurkishBankMCP", version: "0.3.0" });
 
   server.registerTool(
     "bank_provider_status",
     {
-      description: "Show TurkishBankMCP configuration/status without returning token or credential values.",
+      description: "Show the active bank provider and configuration status. Secret values are never returned.",
       annotations: READ_ONLY,
       inputSchema: z.object({})
     },
@@ -80,7 +80,7 @@ function createServer(): McpServer {
   server.registerTool(
     "bank_list_accounts",
     {
-      description: "List bank accounts visible under the active ÖHVPS consent.",
+      description: "List bank accounts available through the active read-only provider.",
       annotations: READ_ONLY,
       inputSchema: z.object({
         page: z.number().int().positive().optional(),
@@ -99,7 +99,7 @@ function createServer(): McpServer {
   server.registerTool(
     "bank_get_balances",
     {
-      description: "Get current balances for accounts visible under the active ÖHVPS consent.",
+      description: "Get current account balances through the active read-only provider.",
       annotations: READ_ONLY,
       inputSchema: z.object({
         page: z.number().int().positive().optional(),
@@ -118,7 +118,7 @@ function createServer(): McpServer {
   server.registerTool(
     "bank_list_transactions",
     {
-      description: "List account transactions. A=credit/incoming, B=debit/outgoing. mode=user allows up to one month; mode=system is limited to 24 hours.",
+      description: "List account transactions. Results use A for incoming money and B for outgoing money.",
       annotations: READ_ONLY,
       inputSchema: z.object({
         accountRef: z.string().min(1),
@@ -165,7 +165,7 @@ function createServer(): McpServer {
   server.registerTool(
     "bank_daily_cashflow",
     {
-      description: "Summarize one calendar day for an account. Intended for scheduled/cron analysis; defaults to Turkey UTC+03:00 and PSU system mode.",
+      description: "Summarize one calendar day for an account. Useful for cron jobs. Defaults to Turkey UTC+03:00.",
       annotations: READ_ONLY,
       inputSchema: z.object({
         accountRef: z.string().min(1),
@@ -187,7 +187,7 @@ function createServer(): McpServer {
   server.registerTool(
     "bank_monthly_cashflow",
     {
-      description: "Backward-compatible cashflow summary tool. Prefer bank_cashflow_summary for new clients.",
+      description: "Backward-compatible cashflow tool. Prefer bank_cashflow_summary for new setups.",
       annotations: READ_ONLY,
       inputSchema: z.object({
         accountRef: z.string().min(1),
@@ -207,7 +207,7 @@ function createServer(): McpServer {
   server.registerTool(
     "bank_list_cards",
     {
-      description: "List cards visible under the active ÖHVPS consent.",
+      description: "List cards when the active provider exposes card-specific data. Direct ÖHVPS supports this. Public Kobaküs KWAP does not.",
       annotations: READ_ONLY,
       inputSchema: z.object({
         page: z.number().int().positive().optional(),
@@ -226,7 +226,7 @@ function createServer(): McpServer {
   server.registerTool(
     "bank_list_card_transactions",
     {
-      description: "List card movements. B=card debit/spend, A=credit/refund, N=non-financial. Period values follow ÖHVPS card-type rules.",
+      description: "List card movements when the active provider exposes card-specific data.",
       annotations: READ_ONLY,
       inputSchema: z.object({
         cardRef: z.string().min(1),
@@ -250,7 +250,7 @@ function createServer(): McpServer {
   server.registerTool(
     "bank_card_spending_summary",
     {
-      description: "Summarize card spending and credits by currency for an ÖHVPS card statement period. No FX conversion is performed.",
+      description: "Summarize card spending and credits when the active provider exposes card-specific data. No FX conversion is performed.",
       annotations: READ_ONLY,
       inputSchema: z.object({
         cardRef: z.string().min(1),
@@ -289,5 +289,5 @@ function createServer(): McpServer {
 
 void serveStdio(createServer);
 console.error(
-  `TurkishBankMCP running on stdio (provider=${provider.name}, OHVPS=${provider.specVersion}, read-only=true)`
+  `TurkishBankMCP running on stdio (provider=${provider.name}, protocol=${provider.specVersion}, read-only=true)`
 );
