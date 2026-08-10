@@ -4,35 +4,42 @@ TurkishBankMCP is intentionally read-only.
 
 ## MCP surface
 
-The server does not expose payment initiation, transfer, card-management, consent-deletion or credential-management tools. Only account/card information reads and deterministic summaries are exposed.
+The server does not expose payment initiation, transfer, card-management, consent-deletion or credential-management tools.
 
-The underlying ÖHVPS standard also defines payment services. Those endpoints are intentionally outside this project.
+The Kobaküs provider only calls `requestMethod=Accounts` and `requestMethod=Transactions`.
+
+The direct ÖHVPS provider only uses account/card information endpoints. Payment initiation endpoints from the wider ÖHVPS standard are outside this project.
 
 ## Secrets
 
 - Never commit `.env`, token files, `.secrets/` or `secrets/`.
-- `bank_provider_status` reports only whether credentials are configured; it never returns their values.
-- Token file paths can be used when an external auth/gateway process rotates credentials.
-- Provider errors are reduced to status/error-code/public detail; request headers and tokens are not returned to the MCP client.
+- `bank_provider_status` only reports whether credentials exist. It never returns secret values.
+- Kobaküs passwords can be read from `KOBAKUS_PASSWORD_FILE`.
+- ÖHVPS tokens can be read from rotating secret files.
+- Request bodies, passwords and access tokens are never included in MCP errors.
 
 ## Cache data
 
-Persistent cache is enabled by default at `.data/cache.json` to protect ÖHVPS request limits across MCP process restarts.
+Persistent cache is enabled by default at `.data/cache.json`.
 
-The cache may contain account, balance, transaction and card data. Treat it as sensitive financial data. TurkishBankMCP writes the cache with `0600` permissions where the platform supports POSIX permissions. The `.data/` directory is ignored by Git.
+The cache can contain account balances and transaction data. Treat it as sensitive financial data. The cache is ignored by Git and TurkishBankMCP tries to write it with `0600` permissions on POSIX systems.
 
 Set `CACHE_FILE=off` if you do not want data persisted to disk.
 
 ## Agent boundary
 
-Read-only MCP tools do not make credentials invisible to an agent that separately has unrestricted shell, filesystem, process-inspection or container-host access. Run the MCP under a dedicated OS/container identity if the rest of the agent has broad local permissions.
+A read-only MCP does not protect secrets from some other tool that has unrestricted shell or filesystem access.
 
-## Production ÖHVPS access
+If Hermes or another agent can read every file on the host then it may also be able to read `.env`. Run TurkishBankMCP under a separate OS user or container if you want a harder boundary.
 
-This repository does not grant YÖS/HBHS status, perform BKM technical certification or bypass customer consent/GKD requirements. Production access must come from an authorized ÖHVPS participant or compatible aggregator/provider.
+## Production access
 
-Only grant the account/card-information permissions required for your use case.
+For Kobaküs use a separate KWAP service credential. Do not use your normal panel password. Follow Kobaküs IP allow-listing and live onboarding requirements.
+
+For direct ÖHVPS access this repository does not grant YÖS/HBHS status and does not bypass customer consent or BKM/TCMB requirements. Production access must come from an authorized participant or compatible provider.
 
 ## Reporting
 
-Do not open a public issue containing bank credentials, access tokens, account data or production request/response payloads. Remove sensitive values before sharing logs or examples.
+Do not open a public issue with bank credentials, tokens, IBANs, account data or production request/response payloads.
+
+Remove sensitive values before sharing logs.
