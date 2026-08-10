@@ -12,7 +12,7 @@ loadDotEnv({
   quiet: true
 });
 
-export type ProviderKind = "mock" | "ohvps";
+export type ProviderKind = "mock" | "ohvps" | "kobakus";
 
 function positiveInt(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
@@ -35,7 +35,20 @@ function cachePath(value: string | undefined): string | undefined {
   return projectPath(clean);
 }
 
+function validHttpsUrl(value: string): boolean {
+  if (!value) return false;
+
+  try {
+    const url = new URL(value);
+    if (url.protocol === "https:") return true;
+    return url.protocol === "http:" && (url.hostname === "localhost" || url.hostname === "127.0.0.1");
+  } catch {
+    return false;
+  }
+}
+
 export const SUPPORTED_OHVPS_VERSION = "2.0.0";
+export const DEFAULT_KOBAKUS_ENDPOINT = "https://app.kobakus.com/webservice/BankPaymentList.php";
 
 export const appConfig = {
   provider: (process.env.BANK_PROVIDER ?? "mock") as ProviderKind,
@@ -45,6 +58,13 @@ export const appConfig = {
   httpMaxRetries: Math.min(positiveInt(process.env.HTTP_MAX_RETRIES, 2), 5),
   httpRetryBaseMs: positiveInt(process.env.HTTP_RETRY_BASE_MS, 500),
   httpMaxRetryWaitMs: positiveInt(process.env.HTTP_MAX_RETRY_WAIT_MS, 5_000),
+  kobakus: {
+    endpoint: process.env.KOBAKUS_ENDPOINT?.trim() || DEFAULT_KOBAKUS_ENDPOINT,
+    firmCode: process.env.KOBAKUS_FIRM_CODE ?? "",
+    password: process.env.KOBAKUS_PASSWORD ?? "",
+    passwordFile: projectPath(process.env.KOBAKUS_PASSWORD_FILE),
+    channelCode: process.env.KOBAKUS_CHANNEL_CODE ?? ""
+  },
   ohvps: {
     baseUrl: trimTrailingSlash(process.env.OHVPS_BASE_URL ?? ""),
     tppCode: process.env.OHVPS_TPP_CODE ?? "",
@@ -59,22 +79,23 @@ export const appConfig = {
   }
 } as const;
 
-function validBaseUrl(value: string): boolean {
-  if (!value) return false;
-
-  try {
-    const url = new URL(value);
-    if (url.protocol === "https:") return true;
-    return url.protocol === "http:" && (url.hostname === "localhost" || url.hostname === "127.0.0.1");
-  } catch {
-    return false;
-  }
-}
-
 export function validateLiveConfig(): string[] {
-  if (appConfig.provider !== "ohvps") return [];
-
   const problems: string[] = [];
+
+  if (appConfig.provider === "kobakus") {
+    if (!validHttpsUrl(appConfig.kobakus.endpoint)) {
+      problems.push("KOBAKUS_ENDPOINT must be a valid HTTPS URL (HTTP is allowed only for localhost)");
+    }
+    if (!appConfig.kobakus.firmCode.trim()) problems.push("KOBAKUS_FIRM_CODE");
+    if (!appConfig.kobakus.channelCode.trim()) problems.push("KOBAKUS_CHANNEL_CODE");
+
+    const hasPassword = Boolean(appConfig.kobakus.password.trim() || appConfig.kobakus.passwordFile);
+    if (!hasPassword) problems.push("KOBAKUS_PASSWORD or KOBAKUS_PASSWORD_FILE");
+
+    return problems;
+  }
+
+  if (appConfig.provider !== "ohvps") return problems;
 
   if (appConfig.specVersion !== SUPPORTED_OHVPS_VERSION) {
     problems.push(`OHVPS_SPEC_VERSION must be ${SUPPORTED_OHVPS_VERSION}`);
@@ -82,7 +103,7 @@ export function validateLiveConfig(): string[] {
 
   if (!appConfig.ohvps.baseUrl) {
     problems.push("OHVPS_BASE_URL");
-  } else if (!validBaseUrl(appConfig.ohvps.baseUrl)) {
+  } else if (!validHttpsUrl(appConfig.ohvps.baseUrl)) {
     problems.push("OHVPS_BASE_URL must be a valid HTTPS URL (HTTP is allowed only for localhost)");
   }
 
