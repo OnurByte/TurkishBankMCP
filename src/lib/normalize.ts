@@ -1,7 +1,42 @@
 import type { NormalizedCardTransaction, NormalizedTransaction } from "../types.js";
 import { asRecord, findArrayByKey, numberValue, stringValue } from "./json.js";
 
+function normalizeCanonicalTransactions(payload: unknown, accountRef?: string): NormalizedTransaction[] | undefined {
+  const rows = findArrayByKey(payload, "transactions");
+  if (rows.length === 0) return undefined;
+
+  const transactions = rows.flatMap((item) => {
+    const row = asRecord(item);
+    if (!row) return [];
+
+    const amount = numberValue(row.amount);
+    const currency = stringValue(row.currency);
+    const direction = row.direction;
+
+    if (amount === undefined || !currency || (direction !== "A" && direction !== "B")) return [];
+
+    return [{
+      id: stringValue(row.id),
+      reference: stringValue(row.reference),
+      accountRef: stringValue(row.accountRef) ?? accountRef,
+      amount,
+      currency,
+      direction,
+      occurredAt: stringValue(row.occurredAt),
+      description: stringValue(row.description),
+      counterparty: stringValue(row.counterparty),
+      balanceAfter: numberValue(row.balanceAfter),
+      raw: row.raw ?? item
+    } satisfies NormalizedTransaction];
+  });
+
+  return transactions.length === rows.length ? transactions : undefined;
+}
+
 export function normalizeTransactions(payload: unknown, accountRef?: string): NormalizedTransaction[] {
+  const canonical = normalizeCanonicalTransactions(payload, accountRef);
+  if (canonical) return canonical;
+
   return findArrayByKey(payload, "isller").flatMap((item) => {
     const row = asRecord(item);
     if (!row) return [];
