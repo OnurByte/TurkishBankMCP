@@ -1,6 +1,8 @@
 # TurkishBankMCP
 
-Türk banka hesaplarını MCP üzerinden Hermes OpenClaw ve benzeri ajanlara bağlamak için yazılmış read-only bir sunucu.
+TurkishBankMCP tamamen açık kaynak bir proje.
+
+Türk banka hesaplarını MCP üzerinden Hermes OpenClaw ve benzeri ajanlara bağlamak için yazıldı.
 
 Amaç basit. Ajan bakiyeni ve hesap hareketlerini okuyabilsin. Günlük ne kadar para girmiş ne kadar çıkmış görebilsin. Harcamaları yorumlayabilsin. Bütçe analizi yapabilsin.
 
@@ -19,11 +21,11 @@ Kodda bunlara ait bir MCP tool yok.
 - hesap hareketleri
 - günlük ve tarih aralıklı nakit akışı
 
-Kartlara özel endpointler doğrudan ÖHVPS bağlantısında var. Kobaküsün public KWAP dokümanı şu an sadece `Accounts` ve `Transactions` çağrılarını yayınlıyor. Bu yüzden Kobaküs providerında kart tool'ları kapalı.
+Kartlara özel endpointler doğrudan ÖHVPS bağlantısında var. Kobaküs'ün public KWAP dokümanı şu an sadece `Accounts` ve `Transactions` çağrılarını yayınlıyor. Bu yüzden Kobaküs providerında kart tool'ları kapalı.
 
 ## En kolay kurulum: Kobaküs
 
-Gerçek banka hesabını bağlamak için en kolay yol şu an Kobaküs.
+Gerçek banka hesabını bağlamak için projede hazır Kobaküs providerı var.
 
 Kobaküs KWAP tek endpoint kullanıyor.
 
@@ -43,9 +45,21 @@ Hesap hareketleri için:
 requestMethod=Transactions
 ```
 
-Garanti BBVA Kobaküs tarafında AIS canlı olarak listeleniyor. Bakiye ve işlem okuma destekleniyor. Aynı bağlantı modeli diğer desteklenen bankalarda da kullanılıyor.
+TurkishBankMCP Kobaküs'ün ödeme API'sini kullanmaz. Sadece hesap ve hareket okuma çağrılarını yapar.
 
-TurkishBankMCP Kobaküsün ödeme API'sini kullanmaz. Sadece yukarıdaki iki read-only çağrıyı yapar.
+### Kobaküs hesabı nasıl açılıyor
+
+Kobaküs sitesinde **Ücretsiz Dene** sayfasına gir.
+
+Formda ad soyad e-posta telefon şirket adı ve birkaç temel bilgi isteniyor. Ürün seçerken **Hesap Hareketleri Görüntüleme** seçmen yeterli.
+
+Formu gönderince demo hesabının hazırlanması gerekiyor. Kobaküs bu sandbox hesabının ücretsiz olduğunu ve kredi kartı istemediğini söylüyor.
+
+Sandbox tarafında test edebilirsin. Canlı KWAP erişiminde gereken `firmCode` `password` ve `channelCode` bilgilerini Kobaküs ekibi veriyor.
+
+Canlı servis için IP tanımı ve servis erişim formu da istenebiliyor.
+
+Bireysel geliştiriciysen şirket alanı biraz kafa karıştırabilir. Kobaküs public dokümanında bireysel geliştirici için ayrı bir kayıt akışı anlatılmıyor. Bu alanda takılırsan destek veya satış ekibine bunun kişisel açık kaynak proje olduğunu söylemek en temiz yol.
 
 ### Kobaküs ayarı
 
@@ -59,15 +73,11 @@ KOBAKUS_CHANNEL_CODE=
 KOBAKUS_PASSWORD=
 ```
 
-İstersen şifreyi `.env` içine koymak yerine dosyadan okutabilirsin.
+Şifreyi `.env` içine koymak istemezsen dosyadan okutabilirsin.
 
 ```dotenv
 KOBAKUS_PASSWORD_FILE=.secrets/kobakus-password
 ```
-
-Kobaküs canlı erişimde `firmCode` `password` ve `channelCode` veriyor. Public dokümana göre canlı servis için IP tanımı da istenebiliyor.
-
-Sandbox ile önce bağlantıyı test etmek daha mantıklı.
 
 ## Doğrudan ÖHVPS
 
@@ -157,9 +167,51 @@ bank_card_spending_summary
 
 Bütün tool'lar read-only olarak işaretli.
 
-Kobaküs kullanırken ilk 7 tool çalışır. Kartla ilgili son 3 tool public KWAP sözleşmesinde kart endpointi olmadığı için açık hata döner.
+Kobaküs kullanırken hesap ve nakit akışı tool'ları çalışır. Kartla ilgili tool'lar public KWAP sözleşmesinde kart endpointi olmadığı için açık hata döner.
 
 Doğrudan ÖHVPS providerında kart tool'ları da kullanılabilir.
+
+## Sıkça sorulan sorular
+
+### Bu proje ücretli mi
+
+Hayır. TurkishBankMCP tamamen açık kaynak ve MIT lisanslı. İndirip değiştirebilir kendi sunucunda çalıştırabilirsin. Kullandığın banka veri sağlayıcısının ayrıca ücreti olabilir.
+
+### Banka şifremi yapay zeka görüyor mu
+
+Hayır. MCP banka şifreni veya API credential bilgilerini tool cevabında ajana göndermez. Secret bilgiler `.env` veya ayrı secret dosyalarında tutulur.
+
+### Yapay zeka hesabımdan para harcayabilir mi
+
+Bu proje üzerinden hayır. Para gönderme ödeme yapma satın alma veya kart yönetme tool'u yok. Proje bilerek read-only tasarlandı.
+
+### Banka bilgilerim internete açık mı oluyor
+
+Hayır. MCP'yi kendi bilgisayarında veya kendi sunucunda çalıştırabilirsin. Yine de `.env` ve cache dosyaları hassas veri içerir. Bunları public paylaşmamak gerekir.
+
+### Her bankaya ayrı ayrı entegrasyon mu yazmam gerekiyor
+
+Hayır. Provider tarafı bunu soyutlamak için var. Kobaküs veya ÖHVPS uyumlu bir bağlantı üzerinden desteklenen hesapları aynı MCP tool'larıyla kullanabilirsin.
+
+### Gerçek banka hesabı bağlamadan deneyebilir miyim
+
+Evet. Projede `mock` provider var. Gerçek hesap veya API bilgisi olmadan MCP'nin nasıl çalıştığını deneyebilirsin. Kobaküs tarafında da ücretsiz sandbox bulunuyor.
+
+### Hermes veya OpenClaw şart mı
+
+Hayır. Bunlar sadece örnek. Stdio MCP destekleyen başka bir ajan veya istemci de TurkishBankMCP'yi kullanabilir.
+
+### Her gün otomatik kontrol ettirebilir miyim
+
+Evet. Ajan tarafında cron veya zamanlanmış görev oluşturabilirsin. Mesela her akşam o gün gelen ve giden parayı özetletebilirsin. MCP sadece veriyi sağlar.
+
+### Veriler bir yerde saklanıyor mu
+
+API limitlerini gereksiz yere tüketmemek için disk cache kullanılabiliyor. Varsayılan klasör `.data` ve Git'e eklenmiyor. İstersen cache'i kapatabilirsin.
+
+### Projeye katkı verebilir miyim
+
+Tabii. Proje tamamen açık kaynak. Bug fix yeni provider test dokümantasyon veya başka bir geliştirme için katkı gönderebilirsin.
 
 ## Kobaküs tarafında yaptığımız şey
 
@@ -183,7 +235,7 @@ Cache dosyası varsayılan olarak:
 .data/cache.json
 ```
 
-Bu dosya banka verisi içerir ve git'e eklenmez.
+Bu dosya banka verisi içerir ve Git'e eklenmez.
 
 ## Docker
 
@@ -198,21 +250,21 @@ docker run --rm -i \
 
 ## Güvenlik
 
-`.env` git'e girmez.
+`.env` Git'e girmez.
 
-`.secrets` git'e girmez.
+`.secrets` Git'e girmez.
 
 MCP cevaplarında API şifresi token veya credential dönmez.
 
 TurkishBankMCP içinde ödeme transfer veya satın alma tool'u yok.
 
-Aynı makinede Hermes'e sınırsız shell ve filesystem yetkisi verirsen o ayrı konu. Böyle bir ajan teorik olarak `.env` dosyasını kendi shell tool'u üzerinden okuyabilir. MCP'nin read-only olması başka tool'ların yetkisini kısıtlamaz.
+Aynı makinede ajana sınırsız shell ve filesystem yetkisi verirsen o ayrı konu. Böyle bir ajan teorik olarak `.env` dosyasını kendi shell tool'u üzerinden okuyabilir. MCP'nin read-only olması başka tool'ların yetkisini kısıtlamaz.
 
 ## Kaynaklar
 
+- Kobaküs ücretsiz dene: https://kobakus.com/ucretsiz-dene/
 - Kobaküs KWAP API: https://kobakus.com/en/api-dokumantasyon/
 - Kobaküs geliştirici sayfası: https://kobakus.com/gelistiriciler/
-- Garanti BBVA + Kobaküs: https://kobakus.com/bankalar/garanti-bbva/
 - ÖHVPS: https://ohvps.github.io/v2.0.0/
 
 ## Lisans
