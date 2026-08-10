@@ -1,7 +1,7 @@
 {
   "name": "turkish-bank-mcp",
-  "version": "0.2.0",
-  "description": "Read-only MCP server for Türkiye Open Banking (ÖHVPS 2.0.0) account, balance, transaction and card analytics.",
+  "version": "0.3.0",
+  "description": "Read-only MCP server for Turkish bank balances and transactions through Kobakus KWAP or OHVPS 2.0.0.",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
