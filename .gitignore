@@ -3,6 +3,9 @@ dist/
 .env
 .env.*
 !.env.example
+.data/
+.secrets/
+secrets/
 *.log
 .DS_Store
 coverage/

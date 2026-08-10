@@ -1,183 +1,206 @@
 # TurkishBankMCP
 
-Read-only MCP server for Turkish Open Banking (**ÖHVPS**) financial data. It is designed for agent hosts such as **Hermes Agent** to inspect accounts, balances, incoming/outgoing transfers, card movements and cash-flow summaries without exposing payment or transfer actions.
+TurkishBankMCP, Türkiye'deki açık bankacılık verilerini MCP üzerinden yapay zeka ajanlarına açan, yalnızca okuma amaçlı açık kaynak bir sunucudur.
 
-> Target: **ÖHVPS 2.0.0**, the active v2 specification as of 2026-08-10. The project intentionally does not target the 2.0.1 draft until it becomes active.
+Proje [ÖHVPS (Ödeme Hizmetleri Veri Paylaşım Servisleri)](https://ohvps.github.io/) standardını kullanır. ÖHVPS, TCMB ve BKM iş birliğiyle oluşturulan Türkiye açık bankacılık altyapısının resmi API standardıdır. Bu proje aktif sürüm olan **ÖHVPS 2.0.0**'ı hedefler.
 
-## Why this architecture?
+TurkishBankMCP'nin amacı bankacılık işlemi yapmak değil, finansal veriyi güvenli ve standart bir biçimde okunabilir hale getirmektir. Hermes Agent, OpenClaw veya başka bir MCP istemcisine bağlayarak hesap bakiyesi, para giriş-çıkışları ve kart hareketleri üzerinde günlük/aylık analiz yaptırabilirsiniz.
 
-ÖHVPS is the bank/open-banking protocol. MCP is the agent-facing tool protocol. TurkishBankMCP sits between them:
+## Ne yapar?
+
+- Hesapları listeler.
+- Güncel bakiyeleri okur.
+- Gelen ve giden hesap hareketlerini getirir.
+- Günlük veya seçilen tarih aralığı için nakit akışını hesaplar.
+- Kartları ve kart hareketlerini okur.
+- Kart harcaması/iadelerini özetler.
+- ÖHVPS sorgu limitlerini gereksiz yere tüketmemek için disk üzerinde süreli önbellek tutabilir.
+- 429 ve geçici 5xx hatalarında kontrollü retry uygular.
+
+## Ne yapmaz?
+
+**Bu MCP para gönderemez, ödeme başlatamaz, alışveriş yapamaz ve kart yönetemez.**
+
+ÖHVPS standardının kendisinde ödeme başlatma servisleri de vardır; TurkishBankMCP bunları bilerek uygulamaz ve MCP tool olarak dışarı açmaz. Kod tabanında yalnızca hesap/kart bilgisi okumaya yönelik endpoint'ler bulunur.
+
+Dolayısıyla ajan tarafında `send_money`, `transfer`, `pay`, `create_payment` gibi bir tool yoktur.
+
+## Hangi bankalarla çalışır?
+
+TurkishBankMCP banka özelinde yazılmış bir entegrasyon değildir. ÖHVPS 2.0.0 kapsamında **Hesap Hizmeti Sağlayıcısı (HHS)** olarak çalışan bankalar ve diğer uyumlu sağlayıcılar aynı standart üzerinden bağlanabilir.
+
+Bu, "Türkiye'deki her banka otomatik olarak çalışır" anlamına gelmez. Bankanın/sağlayıcının ÖHVPS üretim ortamına katılmış ve ilgili hesap/kart bilgi servislerini sunuyor olması gerekir. TCMB'nin Mart 2026 duyurusuna göre Türkiye açık bankacılık altyapısı 53 katılımcıya ulaşmıştır.
+
+Üretim ortamındaki erişim ayrıca müşteri rızası ve yetkili YÖS/HBHS/aggregator akışı gerektirir. Normal bir bireysel banka müşterisine doğrudan kişisel bir "ÖHVPS API key" verilmesi beklenmez.
+
+## Yapay zeka ajanıyla kullanım
+
+MCP'yi Hermes Agent, OpenClaw veya stdio MCP destekleyen başka bir istemciye bağlayabilirsiniz.
+
+Örneğin ajanınıza günlük çalışan bir görev verip şunları yaptırabilirsiniz:
 
 ```text
-Turkish bank / ÖHVPS-compatible provider
-                  │
-                  ▼
-          ÖHVPS 2.0.0 REST
-                  │
-                  ▼
-            TurkishBankMCP
-                  │
-             MCP over stdio
-                  │
-                  ▼
-             Hermes Agent
+Bugünkü hesap hareketlerimi incele.
+Toplam gelen ve giden parayı çıkar.
+Dünkü ve son 7 günlük ortalamayla karşılaştır.
+Tekrarlayan veya alışılmadık harcamaları belirt.
+Bütçem açısından dikkat etmem gereken noktaları kısa şekilde yaz.
+Hiçbir finansal işlem yapma; yalnızca veriyi analiz et.
 ```
 
-The MCP server is deliberately **read-only**. There are no payment-initiation, transfer, consent-deletion or card-management tools.
+Bu yapı özellikle kişisel finans takibi için uygundur: ajan veriyi okur, kategorize eder ve yorumlar; banka hesabında işlem gerçekleştiremez.
 
-## Current tools
+## MCP araçları
 
-| Tool | Purpose |
+| Tool | Açıklama |
 | --- | --- |
-| `bank_provider_status` | Configuration/capability status; never returns secret values |
-| `bank_list_accounts` | Accounts under the active consent |
-| `bank_get_balances` | Current balances |
-| `bank_list_transactions` | Raw account movements |
-| `bank_monthly_cashflow` | Incoming / outgoing / net cashflow by currency |
-| `bank_list_cards` | Cards under the active consent |
-| `bank_list_card_transactions` | Raw card movements |
-| `bank_card_spending_summary` | Card spend / credits / net spend by currency |
+| `bank_provider_status` | Bağlantı ve güvenli yapılandırma durumunu gösterir. Secret değerleri dönmez. |
+| `bank_list_accounts` | Rıza kapsamındaki hesapları listeler. |
+| `bank_get_balances` | Hesap bakiyelerini getirir. |
+| `bank_list_transactions` | Bir hesabın hareketlerini getirir. |
+| `bank_cashflow_summary` | Seçilen aralıkta gelen, giden ve net nakit akışını hesaplar. |
+| `bank_daily_cashflow` | Türkiye saat dilimini varsayarak tek günün nakit akışını özetler. |
+| `bank_monthly_cashflow` | Eski istemciler için geriye uyumlu nakit akışı tool'u. |
+| `bank_list_cards` | Rıza kapsamındaki kartları listeler. |
+| `bank_list_card_transactions` | Kart hareketlerini getirir. |
+| `bank_card_spending_summary` | Kart harcaması, iade ve net harcamayı özetler. |
 
-## ÖHVPS 2.0.0 mapping
+Tüm tool'lar MCP metadata'sında `readOnlyHint: true` olarak işaretlenir.
 
-The live provider uses these account/card information resources:
+## Kurulum
 
-```text
-GET /hesaplar
-GET /bakiye
-GET /hesaplar/{hspRef}/islemler
-GET /kartlar
-GET /kartlar/{kartRef}/kart-hareketleri
-```
-
-The adapter sends the participant bearer credential in `Authorization`, the customer-consent resource credential in `X-Access-Token`, participant codes, request/group IDs and `PSU-Initiated` (`E` for user-triggered, `H` for system-triggered).
-
-### Conservative caching
-
-The minimum supported individual call limits in ÖHVPS 2.0.0 are finite, so the live adapter caches reads conservatively in memory:
-
-- accounts: 6h
-- balances: 1h
-- account transactions: 6h per query
-- cards: 6h
-- card movements: 45m per query
-
-This reduces accidental repeated calls from an agent. It is **not** a replacement for a persistent ledger/sync worker; that is the next architectural layer if long-term analytics are needed.
-
-## Requirements
-
-- Node.js 20+
-- For local development: no banking credentials are needed (`BANK_PROVIDER=mock`)
-- For live data: valid credentials/consent from an authorized ÖHVPS HBHS/YÖS or compatible aggregator/provider
-
-A retail Garanti BBVA (or other bank) customer normally does **not** receive a simple personal ÖHVPS API key. Production account-data access is a regulated provider/consent flow.
-
-## Setup
+Node.js 22 veya üstü önerilir.
 
 ```bash
 git clone git@github.com:OnurByte/TurkishBankMCP.git
 cd TurkishBankMCP
+
 npm install
 cp .env.example .env
-npm run build
+
+npm run check
 npm run inspect
 ```
 
-The default `.env.example` uses the safe mock provider. Try the MCP Inspector first, then switch to a live provider only after you have valid credentials.
+Varsayılan provider `mock` olduğu için banka erişim bilgisi olmadan MCP'yi çalıştırabilirsiniz.
 
-## `.env`
-
-```dotenv
-BANK_PROVIDER=ohvps
-OHVPS_SPEC_VERSION=2.0.0
-OHVPS_BASE_URL=https://your-authorized-provider.example/ohvps/hbh/s2.0
-OHVPS_TPP_CODE=...
-OHVPS_ASPSP_CODE=...
-OHVPS_GATEWAY_TOKEN=...
-OHVPS_ACCESS_TOKEN=...
-OHVPS_GROUP_ID=
-OHVPS_PSU_FRAUD_CHECK=
-HTTP_TIMEOUT_MS=12000
+```bash
+npm start
 ```
-
-`.env` is ignored by Git. Never put real secrets in `.env.example`.
 
 ## Hermes Agent
 
-Hermes supports local stdio MCP servers in `~/.hermes/config.yaml` under `mcp_servers`.
-
-### Option A — TurkishBankMCP reads its own `.env`
-
-Build the project and add:
+Projeyi build ettikten sonra `~/.hermes/config.yaml` içine ekleyebilirsiniz:
 
 ```yaml
 mcp_servers:
   turkish_bank:
     command: "node"
-    args: ["/absolute/path/to/TurkishBankMCP/dist/index.js"]
+    args:
+      - "/absolute/path/to/TurkishBankMCP/dist/index.js"
     tools:
       include:
         - bank_provider_status
         - bank_list_accounts
         - bank_get_balances
         - bank_list_transactions
-        - bank_monthly_cashflow
+        - bank_cashflow_summary
+        - bank_daily_cashflow
         - bank_list_cards
         - bank_list_card_transactions
         - bank_card_spending_summary
 ```
 
-`src/config.ts` resolves `.env` relative to the project, so Hermes does not need to receive those values as MCP arguments.
+Secret'ları MCP argümanı olarak vermek gerekmez. TurkishBankMCP kendi `.env` dosyasını okuyabilir veya Hermes'in `~/.hermes/.env` dosyasındaki değişkenler `config.yaml` üzerinden aktarılabilir.
 
-### Option B — keep secrets in Hermes' secret env
+## Üretim yapılandırması
 
-Put values in `~/.hermes/.env`, then pass only environment references in `config.yaml`:
+ÖHVPS uyumlu gerçek bir provider/aggregator erişiminiz varsa:
 
-```yaml
-mcp_servers:
-  turkish_bank:
-    command: "node"
-    args: ["/absolute/path/to/TurkishBankMCP/dist/index.js"]
-    env:
-      BANK_PROVIDER: "ohvps"
-      OHVPS_BASE_URL: "${OHVPS_BASE_URL}"
-      OHVPS_TPP_CODE: "${OHVPS_TPP_CODE}"
-      OHVPS_ASPSP_CODE: "${OHVPS_ASPSP_CODE}"
-      OHVPS_GATEWAY_TOKEN: "${OHVPS_GATEWAY_TOKEN}"
-      OHVPS_ACCESS_TOKEN: "${OHVPS_ACCESS_TOKEN}"
+```dotenv
+BANK_PROVIDER=ohvps
+OHVPS_SPEC_VERSION=2.0.0
+
+OHVPS_BASE_URL=https://provider.example/ohvps/hbh/s2.0
+OHVPS_TPP_CODE=0000
+OHVPS_ASPSP_CODE=0000
+
+OHVPS_GATEWAY_TOKEN=
+OHVPS_ACCESS_TOKEN=
+
+# Token'ları env yerine dosyadan okutmak isterseniz:
+OHVPS_GATEWAY_TOKEN_FILE=
+OHVPS_ACCESS_TOKEN_FILE=
+OHVPS_PSU_FRAUD_CHECK_FILE=
+
+OHVPS_GROUP_ID=
+OHVPS_PSU_FRAUD_CHECK=
+
+HTTP_TIMEOUT_MS=12000
+HTTP_MAX_RETRIES=2
+HTTP_RETRY_BASE_MS=500
+HTTP_MAX_RETRY_WAIT_MS=5000
+
+# "off" verilirse disk cache kapatılır.
+CACHE_FILE=.data/cache.json
 ```
 
-Hermes discovers the MCP tools; it does not need a tool that prints the credential. Note that if Hermes separately has unrestricted shell/filesystem access on the same host, that broader permission is part of your security boundary.
+Secret dosyaları göreli verilirse proje kök dizinine göre çözülür. Token dosyası tanımlanmışsa her istek öncesinde yeniden okunur; bu sayede token rotasyonu için MCP sürecini yeniden başlatmak gerekmez.
 
-## Mock examples
+### API limitleri
 
-With `BANK_PROVIDER=mock`, Hermes can already ask:
+ÖHVPS otomatik sorgular için minimum desteklenmesi gereken limitler tanımlar. Bireysel hesaplarda örneğin hesap listesi günde 4, bakiye günde 24, hesap hareketleri günde 4 ve kart hareketleri günde 32 sorgu seviyesindedir.
 
-- "Banka hesaplarımı ve bakiyelerimi göster."
-- "Ağustos hesabıma ne kadar para girmiş ve çıkmış?"
-- "Kart dönemindeki toplam harcamayı çıkar."
-- "Kart hareketlerini inceleyip muhtemel abonelikleri bul."
+TurkishBankMCP bu yüzden:
 
-Subscription detection is intentionally left to Hermes/your analysis layer for now; the MCP server returns clean card movement descriptions and amounts and provides deterministic totals.
+- hesap listesini 6 saat,
+- bakiyeyi 1 saat,
+- aynı hesap hareketi sorgusunu 6 saat,
+- kart listesini 6 saat,
+- aynı kart hareketi sorgusunu 45 dakika
 
-## What is not implemented yet?
+önbellekte tutar.
 
-- Consent creation/GKD browser flow
-- Automatic refresh-token lifecycle
-- JWS signing for consent/token endpoints
-- Persistent SQLite/Postgres ledger
-- Scheduled incremental sync
-- Multi-bank aggregator adapters beyond generic ÖHVPS
-- Subscription recurrence engine
+Cache dosyası process restart sonrasında da korunur ve `0600` izinleriyle yazılmaya çalışılır. Cache banka verisi içerdiği için `.gitignore` kapsamındadır ve paylaşılmamalıdır.
 
-These are separate from the read-only MCP surface and can be added without changing Hermes prompts/tool names.
+429 yanıtlarında `X-RateLimit-Reset` / `Retry-After` dikkate alınır. Uzun bir bekleme gerekiyorsa MCP çağrısı saatlerce açık tutulmaz; ajan tekrar denemek üzere hata alır.
 
-## Security
+## Docker
 
-See [SECURITY.md](SECURITY.md). The short version: no payment tools, no secret-returning tools, `.env` is gitignored, and production access should use least-privilege account/card-information consent only.
+```bash
+docker build -t turkish-bank-mcp .
+docker run --rm -i \
+  --env-file .env \
+  -v "$PWD/.data:/app/.data" \
+  turkish-bank-mcp
+```
 
-## References
+MCP stdio kullandığı için container `-i` ile çalıştırılmalıdır.
 
-- ÖHVPS official documentation: `https://ohvps.github.io/v2.0.0/`
-- Model Context Protocol: `https://modelcontextprotocol.io/`
-- Hermes Agent MCP docs: `https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/features/mcp.md`
+## Güvenlik
+
+- `.env`, token dosyaları ve `.data` Git'e eklenmez.
+- MCP tool çıktılarında credential/token bulunmaz.
+- Ödeme veya transfer tool'u yoktur.
+- HTTP hata mesajları header/token içeriğini loglamaz.
+- Disk cache finansal veri içerdiği için hassas kabul edilmelidir.
+- Ajanınıza ayrıca sınırsız shell/filesystem erişimi verdiyseniz bu ayrı bir güvenlik sınırıdır; MCP'nin read-only olması o yetkileri kısıtlamaz.
+
+Daha ayrıntılı notlar için [SECURITY.md](SECURITY.md) dosyasına bakın.
+
+## Production sınırı
+
+Bu repo çalışan bir MCP sunucusu ve ÖHVPS hesap/kart bilgi adapter'ıdır; fakat **YÖS/HBHS lisansı, BKM teknik sertifikasyonu veya müşteri rızası sürecinin yerine geçmez**. Gerçek banka verisine ulaşmak için yetkili bir üretim bağlantısı gerekir.
+
+Doğrudan ÖHVPS katılımcısıysanız kurumunuza ait sertifika, kimlik doğrulama, rıza/GKD ve erişim belirteci yaşam döngüsünü kendi altyapınız veya yetkili gateway'iniz sağlamalıdır. TurkishBankMCP bu katmandan aldığı read-only erişim bilgilerini MCP'ye dönüştürür.
+
+## Kaynaklar
+
+- [ÖHVPS API İlke ve Kuralları](https://ohvps.github.io/)
+- [TCMB - Açık Bankacılık Hizmetlerinin Yeni Özellikleri, 17 Mart 2026](https://www.tcmb.gov.tr/wps/wcm/connect/tr/tcmb%2Btr/main%2Bmenu/duyurular/basin/2026/duy2026-13)
+- [Model Context Protocol](https://modelcontextprotocol.io/)
+- [Hermes Agent MCP dokümantasyonu](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/features/mcp.md)
+
+## Lisans
+
+MIT
