@@ -12,15 +12,9 @@ loadDotEnv({
   quiet: true
 });
 
-export type ProviderKind = "mock" | "ohvps" | "kobakus";
-
 function positiveInt(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-function trimTrailingSlash(value: string): string {
-  return value.replace(/\/+$/, "");
 }
 
 function projectPath(value: string | undefined): string | undefined {
@@ -29,92 +23,95 @@ function projectPath(value: string | undefined): string | undefined {
   return isAbsolute(clean) ? clean : resolve(projectRoot, clean);
 }
 
-function cachePath(value: string | undefined): string | undefined {
-  const clean = (value ?? ".data/cache.json").trim();
-  if (!clean || /^(off|false|none)$/i.test(clean)) return undefined;
-  return projectPath(clean);
-}
-
 function validHttpsUrl(value: string): boolean {
   if (!value) return false;
-
   try {
     const url = new URL(value);
-    if (url.protocol === "https:") return true;
-    return url.protocol === "http:" && (url.hostname === "localhost" || url.hostname === "127.0.0.1");
+    return url.protocol === "https:" || (url.protocol === "http:" && ["localhost", "127.0.0.1"].includes(url.hostname));
   } catch {
     return false;
   }
 }
 
-export const SUPPORTED_OHVPS_VERSION = "2.0.0";
-export const DEFAULT_KOBAKUS_ENDPOINT = "https://app.kobakus.com/webservice/BankPaymentList.php";
+function method(value: string | undefined): "GET" | "POST" | undefined {
+  const clean = value?.trim().toUpperCase();
+  return clean === "GET" || clean === "POST" ? clean : undefined;
+}
+
+export const DEFAULT_GARANTI_TOKEN_URL = "https://apis.garantibbva.com.tr/auth/oauth/v2/token";
 
 export const appConfig = {
-  provider: (process.env.BANK_PROVIDER ?? "mock") as ProviderKind,
-  specVersion: process.env.OHVPS_SPEC_VERSION ?? SUPPORTED_OHVPS_VERSION,
-  cacheFile: cachePath(process.env.CACHE_FILE),
   httpTimeoutMs: positiveInt(process.env.HTTP_TIMEOUT_MS, 12_000),
   httpMaxRetries: Math.min(positiveInt(process.env.HTTP_MAX_RETRIES, 2), 5),
   httpRetryBaseMs: positiveInt(process.env.HTTP_RETRY_BASE_MS, 500),
   httpMaxRetryWaitMs: positiveInt(process.env.HTTP_MAX_RETRY_WAIT_MS, 5_000),
-  kobakus: {
-    endpoint: process.env.KOBAKUS_ENDPOINT?.trim() || DEFAULT_KOBAKUS_ENDPOINT,
-    firmCode: process.env.KOBAKUS_FIRM_CODE ?? "",
-    password: process.env.KOBAKUS_PASSWORD ?? "",
-    passwordFile: projectPath(process.env.KOBAKUS_PASSWORD_FILE),
-    channelCode: process.env.KOBAKUS_CHANNEL_CODE ?? ""
-  },
-  ohvps: {
-    baseUrl: trimTrailingSlash(process.env.OHVPS_BASE_URL ?? ""),
-    tppCode: process.env.OHVPS_TPP_CODE ?? "",
-    aspspCode: process.env.OHVPS_ASPSP_CODE ?? "",
-    gatewayToken: process.env.OHVPS_GATEWAY_TOKEN ?? "",
-    gatewayTokenFile: projectPath(process.env.OHVPS_GATEWAY_TOKEN_FILE),
-    accessToken: process.env.OHVPS_ACCESS_TOKEN ?? "",
-    accessTokenFile: projectPath(process.env.OHVPS_ACCESS_TOKEN_FILE),
-    groupId: process.env.OHVPS_GROUP_ID ?? "",
-    psuFraudCheck: process.env.OHVPS_PSU_FRAUD_CHECK ?? "",
-    psuFraudCheckFile: projectPath(process.env.OHVPS_PSU_FRAUD_CHECK_FILE)
+  garanti: {
+    tokenUrl: process.env.GARANTI_TOKEN_URL?.trim() || DEFAULT_GARANTI_TOKEN_URL,
+    clientId: process.env.GARANTI_CLIENT_ID?.trim() ?? "",
+    clientSecret: process.env.GARANTI_CLIENT_SECRET ?? "",
+    clientSecretFile: projectPath(process.env.GARANTI_CLIENT_SECRET_FILE),
+    redirectUri: process.env.GARANTI_REDIRECT_URI?.trim() ?? "",
+    accountInformationUrl: process.env.GARANTI_ACCOUNT_INFORMATION_URL?.trim() ?? "",
+    accountInformationMethod: method(process.env.GARANTI_ACCOUNT_INFORMATION_METHOD),
+    accountInformationBodyTemplate: process.env.GARANTI_ACCOUNT_INFORMATION_BODY_TEMPLATE ?? "",
+    accountInformationContentType: process.env.GARANTI_ACCOUNT_INFORMATION_CONTENT_TYPE?.trim() ?? "application/json",
+    accountTransactionsUrl: process.env.GARANTI_ACCOUNT_TRANSACTIONS_URL?.trim() ?? "",
+    accountTransactionsMethod: method(process.env.GARANTI_ACCOUNT_TRANSACTIONS_METHOD),
+    accountTransactionsBodyTemplate: process.env.GARANTI_ACCOUNT_TRANSACTIONS_BODY_TEMPLATE ?? "",
+    accountTransactionsContentType: process.env.GARANTI_ACCOUNT_TRANSACTIONS_CONTENT_TYPE?.trim() ?? "application/json",
+    extraHeadersJson: process.env.GARANTI_EXTRA_HEADERS_JSON?.trim() ?? "{}"
   }
 } as const;
 
+function validateReadOnlyEndpoint(label: string, value: string): string[] {
+  if (!value) return [label];
+  if (!validHttpsUrl(value.replace(/\{\{[^}]+\}\}/g, "x"))) {
+    return [`${label} must be a valid HTTPS URL`];
+  }
+
+  const lower = value.toLowerCase();
+  const forbidden = [
+    "transfer",
+    "eft",
+    "payment",
+    "payments",
+    "bulk-transfer",
+    "direct-collection",
+    "loan",
+    "credit-card",
+    "card-management"
+  ];
+
+  if (forbidden.some((word) => lower.includes(word))) {
+    return [`${label} looks like a non-read-only endpoint and was refused`];
+  }
+
+  return [];
+}
+
 export function validateLiveConfig(): string[] {
   const problems: string[] = [];
+  const cfg = appConfig.garanti;
 
-  if (appConfig.provider === "kobakus") {
-    if (!validHttpsUrl(appConfig.kobakus.endpoint)) {
-      problems.push("KOBAKUS_ENDPOINT must be a valid HTTPS URL (HTTP is allowed only for localhost)");
+  if (!validHttpsUrl(cfg.tokenUrl)) problems.push("GARANTI_TOKEN_URL must be a valid HTTPS URL");
+  if (!cfg.clientId) problems.push("GARANTI_CLIENT_ID");
+  if (!cfg.redirectUri || !validHttpsUrl(cfg.redirectUri)) problems.push("GARANTI_REDIRECT_URI must match the HTTPS callback URL in Garanti Developer Portal");
+  if (!cfg.clientSecret && !cfg.clientSecretFile) problems.push("GARANTI_CLIENT_SECRET or GARANTI_CLIENT_SECRET_FILE");
+
+  problems.push(...validateReadOnlyEndpoint("GARANTI_ACCOUNT_INFORMATION_URL", cfg.accountInformationUrl));
+  problems.push(...validateReadOnlyEndpoint("GARANTI_ACCOUNT_TRANSACTIONS_URL", cfg.accountTransactionsUrl));
+
+  if (!cfg.accountInformationMethod) problems.push("GARANTI_ACCOUNT_INFORMATION_METHOD must be GET or POST");
+  if (!cfg.accountTransactionsMethod) problems.push("GARANTI_ACCOUNT_TRANSACTIONS_METHOD must be GET or POST");
+
+  try {
+    const headers = JSON.parse(cfg.extraHeadersJson) as unknown;
+    if (!headers || typeof headers !== "object" || Array.isArray(headers)) {
+      problems.push("GARANTI_EXTRA_HEADERS_JSON must be a JSON object");
     }
-    if (!appConfig.kobakus.firmCode.trim()) problems.push("KOBAKUS_FIRM_CODE");
-    if (!appConfig.kobakus.channelCode.trim()) problems.push("KOBAKUS_CHANNEL_CODE");
-
-    const hasPassword = Boolean(appConfig.kobakus.password.trim() || appConfig.kobakus.passwordFile);
-    if (!hasPassword) problems.push("KOBAKUS_PASSWORD or KOBAKUS_PASSWORD_FILE");
-
-    return problems;
+  } catch {
+    problems.push("GARANTI_EXTRA_HEADERS_JSON must be valid JSON");
   }
-
-  if (appConfig.provider !== "ohvps") return problems;
-
-  if (appConfig.specVersion !== SUPPORTED_OHVPS_VERSION) {
-    problems.push(`OHVPS_SPEC_VERSION must be ${SUPPORTED_OHVPS_VERSION}`);
-  }
-
-  if (!appConfig.ohvps.baseUrl) {
-    problems.push("OHVPS_BASE_URL");
-  } else if (!validHttpsUrl(appConfig.ohvps.baseUrl)) {
-    problems.push("OHVPS_BASE_URL must be a valid HTTPS URL (HTTP is allowed only for localhost)");
-  }
-
-  if (!appConfig.ohvps.tppCode) problems.push("OHVPS_TPP_CODE");
-  if (!appConfig.ohvps.aspspCode) problems.push("OHVPS_ASPSP_CODE");
-
-  const hasGatewayToken = Boolean(appConfig.ohvps.gatewayToken || appConfig.ohvps.gatewayTokenFile);
-  const hasAccessToken = Boolean(appConfig.ohvps.accessToken || appConfig.ohvps.accessTokenFile);
-
-  if (!hasGatewayToken) problems.push("OHVPS_GATEWAY_TOKEN or OHVPS_GATEWAY_TOKEN_FILE");
-  if (!hasAccessToken) problems.push("OHVPS_ACCESS_TOKEN or OHVPS_ACCESS_TOKEN_FILE");
 
   return problems;
 }
