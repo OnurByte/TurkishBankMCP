@@ -2,7 +2,9 @@
 
 TurkishBankMCP tamamen açık kaynak ve MIT lisanslı bir proje
 
-Şu an direkt Garanti BBVA API Store ile çalışıyor
+Şu an sadece Garanti BBVA için hazır
+
+Başka banka kullanıyorsan kendi providerını ekleyebilirsin
 
 Arada Kobaküs yok başka aggregator yok direkt Garanti
 
@@ -244,6 +246,12 @@ Hermes'e ayrıca sınırsız shell ve filesystem yetkisi verirsen o ayrı güven
 Evet proje tamamen açık kaynak ve ücretsiz
 
 Garanti API Store'un canlı kullanım şartları ise Garanti'nin onayına bağlı
+
+### Başka banka kullanıyorum ne yapacağım
+
+Bu sürüm sadece Garanti için hazır
+
+Başka banka kullanıyorsan kendi providerını ekleyebilirsin
 
 ### Banka şifremi girmem gerekiyor mu
 
