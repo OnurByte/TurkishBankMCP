@@ -1,14 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import * as z from "zod/v4";
-import {
-  cardSpendingByCurrency,
-  cashflowByCurrency,
-  normalizeCardTransactions,
-  normalizeTransactions
-} from "./lib/normalize.js";
 import { createProvider } from "./provider.js";
-import type { PsuMode } from "./types.js";
 
 const provider = createProvider();
 const READ_ONLY = {
@@ -31,46 +24,13 @@ function errorResult(error: unknown) {
   };
 }
 
-async function cashflowSummary(args: {
-  accountRef: string;
-  from: string;
-  to: string;
-  mode: PsuMode;
-}) {
-  const raw = await provider.listTransactions({
-    accountRef: args.accountRef,
-    from: args.from,
-    to: args.to,
-    mode: args.mode,
-    pageSize: 100
-  });
-
-  const transactions = normalizeTransactions(raw, args.accountRef);
-
-  return {
-    accountRef: args.accountRef,
-    from: args.from,
-    to: args.to,
-    mode: args.mode,
-    totals: cashflowByCurrency(transactions),
-    transactions
-  };
-}
-
-function dayRange(date: string, utcOffset: string) {
-  return {
-    from: `${date}T00:00:00${utcOffset}`,
-    to: `${date}T23:59:59${utcOffset}`
-  };
-}
-
 function createServer(): McpServer {
-  const server = new McpServer({ name: "TurkishBankMCP", version: "0.3.0" });
+  const server = new McpServer({ name: "TurkishBankMCP", version: "0.4.0" });
 
   server.registerTool(
     "bank_provider_status",
     {
-      description: "Show the active bank provider and configuration status. Secret values are never returned.",
+      description: "Show Garanti API Store configuration status without exposing credentials.",
       annotations: READ_ONLY,
       inputSchema: z.object({})
     },
@@ -78,13 +38,29 @@ function createServer(): McpServer {
   );
 
   server.registerTool(
+    "bank_test_connection",
+    {
+      description: "Test Garanti OAuth client_credentials authentication. The access token is never returned.",
+      annotations: READ_ONLY,
+      inputSchema: z.object({})
+    },
+    async () => {
+      try {
+        return jsonResult(await provider.testConnection());
+      } catch (error) {
+        return errorResult(error);
+      }
+    }
+  );
+
+  server.registerTool(
     "bank_list_accounts",
     {
-      description: "List bank accounts available through the active read-only provider.",
+      description: "Call Garanti Account Information and return its read-only response.",
       annotations: READ_ONLY,
       inputSchema: z.object({
         page: z.number().int().positive().optional(),
-        pageSize: z.number().int().min(1).max(100).optional()
+        pageSize: z.number().int().min(1).max(1000).optional()
       })
     },
     async (args) => {
@@ -99,11 +75,11 @@ function createServer(): McpServer {
   server.registerTool(
     "bank_get_balances",
     {
-      description: "Get current account balances through the active read-only provider.",
+      description: "Read account information from Garanti. This uses the same Account Information product because the public portal does not document a separate balance API.",
       annotations: READ_ONLY,
       inputSchema: z.object({
         page: z.number().int().positive().optional(),
-        pageSize: z.number().int().min(1).max(100).optional()
+        pageSize: z.number().int().min(1).max(1000).optional()
       })
     },
     async (args) => {
@@ -118,18 +94,17 @@ function createServer(): McpServer {
   server.registerTool(
     "bank_list_transactions",
     {
-      description: "List account transactions. Results use A for incoming money and B for outgoing money.",
+      description: "Call Garanti Account Transactions for an account and date range. No payment or transfer endpoint is available to this MCP.",
       annotations: READ_ONLY,
       inputSchema: z.object({
         accountRef: z.string().min(1),
         from: z.string().min(1).describe("ISO date-time"),
         to: z.string().min(1).describe("ISO date-time"),
-        mode: z.enum(["user", "system"]).default("user"),
         direction: z.enum(["A", "B"]).optional(),
         minAmount: z.number().nonnegative().optional(),
         maxAmount: z.number().nonnegative().optional(),
         page: z.number().int().positive().optional(),
-        pageSize: z.number().int().min(1).max(100).optional()
+        pageSize: z.number().int().min(1).max(1000).optional()
       })
     },
     async (args) => {
@@ -141,153 +116,8 @@ function createServer(): McpServer {
     }
   );
 
-  server.registerTool(
-    "bank_cashflow_summary",
-    {
-      description: "Summarize incoming money, outgoing money and net cashflow for one account and date range. No FX conversion is performed.",
-      annotations: READ_ONLY,
-      inputSchema: z.object({
-        accountRef: z.string().min(1),
-        from: z.string().min(1).describe("ISO date-time"),
-        to: z.string().min(1).describe("ISO date-time"),
-        mode: z.enum(["user", "system"]).default("user")
-      })
-    },
-    async ({ accountRef, from, to, mode }) => {
-      try {
-        return jsonResult(await cashflowSummary({ accountRef, from, to, mode }));
-      } catch (error) {
-        return errorResult(error);
-      }
-    }
-  );
-
-  server.registerTool(
-    "bank_daily_cashflow",
-    {
-      description: "Summarize one calendar day for an account. Useful for cron jobs. Defaults to Turkey UTC+03:00.",
-      annotations: READ_ONLY,
-      inputSchema: z.object({
-        accountRef: z.string().min(1),
-        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe("YYYY-MM-DD"),
-        utcOffset: z.string().regex(/^[+-](?:0\d|1[0-4]):[0-5]\d$/).default("+03:00"),
-        mode: z.enum(["user", "system"]).default("system")
-      })
-    },
-    async ({ accountRef, date, utcOffset, mode }) => {
-      try {
-        const range = dayRange(date, utcOffset);
-        return jsonResult(await cashflowSummary({ accountRef, ...range, mode }));
-      } catch (error) {
-        return errorResult(error);
-      }
-    }
-  );
-
-  server.registerTool(
-    "bank_monthly_cashflow",
-    {
-      description: "Backward-compatible cashflow tool. Prefer bank_cashflow_summary for new setups.",
-      annotations: READ_ONLY,
-      inputSchema: z.object({
-        accountRef: z.string().min(1),
-        from: z.string().min(1),
-        to: z.string().min(1)
-      })
-    },
-    async ({ accountRef, from, to }) => {
-      try {
-        return jsonResult(await cashflowSummary({ accountRef, from, to, mode: "user" }));
-      } catch (error) {
-        return errorResult(error);
-      }
-    }
-  );
-
-  server.registerTool(
-    "bank_list_cards",
-    {
-      description: "List cards when the active provider exposes card-specific data. Direct ÖHVPS supports this. Public Kobaküs KWAP does not.",
-      annotations: READ_ONLY,
-      inputSchema: z.object({
-        page: z.number().int().positive().optional(),
-        pageSize: z.number().int().min(1).max(100).optional()
-      })
-    },
-    async (args) => {
-      try {
-        return jsonResult(await provider.listCards(args));
-      } catch (error) {
-        return errorResult(error);
-      }
-    }
-  );
-
-  server.registerTool(
-    "bank_list_card_transactions",
-    {
-      description: "List card movements when the active provider exposes card-specific data.",
-      annotations: READ_ONLY,
-      inputSchema: z.object({
-        cardRef: z.string().min(1),
-        period: z.number().int().min(-12).max(99),
-        statementCurrency: z.enum(["TRY", "USD", "EUR", "GBP"]).optional(),
-        direction: z.enum(["A", "B", "N"]).optional(),
-        mode: z.enum(["user", "system"]).default("user"),
-        page: z.number().int().positive().optional(),
-        pageSize: z.number().int().min(1).max(100).optional()
-      })
-    },
-    async (args) => {
-      try {
-        return jsonResult(await provider.listCardTransactions(args));
-      } catch (error) {
-        return errorResult(error);
-      }
-    }
-  );
-
-  server.registerTool(
-    "bank_card_spending_summary",
-    {
-      description: "Summarize card spending and credits when the active provider exposes card-specific data. No FX conversion is performed.",
-      annotations: READ_ONLY,
-      inputSchema: z.object({
-        cardRef: z.string().min(1),
-        period: z.number().int().min(-12).max(99),
-        statementCurrency: z.enum(["TRY", "USD", "EUR", "GBP"]).optional(),
-        mode: z.enum(["user", "system"]).default("user")
-      })
-    },
-    async ({ cardRef, period, statementCurrency, mode }) => {
-      try {
-        const raw = await provider.listCardTransactions({
-          cardRef,
-          period,
-          statementCurrency,
-          mode,
-          pageSize: 100
-        });
-
-        const transactions = normalizeCardTransactions(raw, cardRef);
-
-        return jsonResult({
-          cardRef,
-          period,
-          mode,
-          totals: cardSpendingByCurrency(transactions),
-          transactions
-        });
-      } catch (error) {
-        return errorResult(error);
-      }
-    }
-  );
-
   return server;
 }
 
 void serveStdio(createServer);
-console.error(
-  `TurkishBankMCP running on stdio (provider=${provider.name}, protocol=${provider.specVersion}, read-only=true)`
-);
+console.error(`TurkishBankMCP running on stdio (provider=${provider.name}, read-only=true)`);
