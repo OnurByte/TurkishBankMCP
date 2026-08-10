@@ -1,75 +1,96 @@
 # TurkishBankMCP
 
-TurkishBankMCP, Türkiye'deki açık bankacılık verilerini MCP üzerinden yapay zeka ajanlarına açan, yalnızca okuma amaçlı açık kaynak bir sunucudur.
+Türk banka hesaplarını MCP üzerinden Hermes OpenClaw ve benzeri ajanlara bağlamak için yazılmış read-only bir sunucu.
 
-Proje [ÖHVPS (Ödeme Hizmetleri Veri Paylaşım Servisleri)](https://ohvps.github.io/) standardını kullanır. ÖHVPS, TCMB ve BKM iş birliğiyle oluşturulan Türkiye açık bankacılık altyapısının resmi API standardıdır. Bu proje aktif sürüm olan **ÖHVPS 2.0.0**'ı hedefler.
+Amaç basit. Ajan bakiyeni ve hesap hareketlerini okuyabilsin. Günlük ne kadar para girmiş ne kadar çıkmış görebilsin. Harcamaları yorumlayabilsin. Bütçe analizi yapabilsin.
 
-TurkishBankMCP'nin amacı bankacılık işlemi yapmak değil, finansal veriyi güvenli ve standart bir biçimde okunabilir hale getirmektir. Hermes Agent, OpenClaw veya başka bir MCP istemcisine bağlayarak hesap bakiyesi, para giriş-çıkışları ve kart hareketleri üzerinde günlük/aylık analiz yaptırabilirsiniz.
+Bu proje para göndermez. Ödeme başlatmaz. Alışveriş yapmaz. Karttan para çekmez.
 
-## Ne yapar?
+Kodda bunlara ait bir MCP tool yok.
 
-- Hesapları listeler.
-- Güncel bakiyeleri okur.
-- Gelen ve giden hesap hareketlerini getirir.
-- Günlük veya seçilen tarih aralığı için nakit akışını hesaplar.
-- Kartları ve kart hareketlerini okur.
-- Kart harcaması/iadelerini özetler.
-- ÖHVPS sorgu limitlerini gereksiz yere tüketmemek için disk üzerinde süreli önbellek tutabilir.
-- 429 ve geçici 5xx hatalarında kontrollü retry uygular.
+## Ne okuyabiliyor
 
-## Ne yapmaz?
+- banka hesapları
+- güncel bakiye
+- kullanılabilir bakiye
+- bloke bakiye
+- gelen para
+- giden para
+- hesap hareketleri
+- günlük ve tarih aralıklı nakit akışı
 
-**Bu MCP para gönderemez, ödeme başlatamaz, alışveriş yapamaz ve kart yönetemez.**
+Kartlara özel endpointler doğrudan ÖHVPS bağlantısında var. Kobaküsün public KWAP dokümanı şu an sadece `Accounts` ve `Transactions` çağrılarını yayınlıyor. Bu yüzden Kobaküs providerında kart tool'ları kapalı.
 
-ÖHVPS standardının kendisinde ödeme başlatma servisleri de vardır; TurkishBankMCP bunları bilerek uygulamaz ve MCP tool olarak dışarı açmaz. Kod tabanında yalnızca hesap/kart bilgisi okumaya yönelik endpoint'ler bulunur.
+## En kolay kurulum: Kobaküs
 
-Dolayısıyla ajan tarafında `send_money`, `transfer`, `pay`, `create_payment` gibi bir tool yoktur.
+Gerçek banka hesabını bağlamak için en kolay yol şu an Kobaküs.
 
-## Hangi bankalarla çalışır?
-
-TurkishBankMCP banka özelinde yazılmış bir entegrasyon değildir. ÖHVPS 2.0.0 kapsamında **Hesap Hizmeti Sağlayıcısı (HHS)** olarak çalışan bankalar ve diğer uyumlu sağlayıcılar aynı standart üzerinden bağlanabilir.
-
-Bu, "Türkiye'deki her banka otomatik olarak çalışır" anlamına gelmez. Bankanın/sağlayıcının ÖHVPS üretim ortamına katılmış ve ilgili hesap/kart bilgi servislerini sunuyor olması gerekir. TCMB'nin Mart 2026 duyurusuna göre Türkiye açık bankacılık altyapısı 53 katılımcıya ulaşmıştır.
-
-Üretim ortamındaki erişim ayrıca müşteri rızası ve yetkili YÖS/HBHS/aggregator akışı gerektirir. Normal bir bireysel banka müşterisine doğrudan kişisel bir "ÖHVPS API key" verilmesi beklenmez.
-
-## Yapay zeka ajanıyla kullanım
-
-MCP'yi Hermes Agent, OpenClaw veya stdio MCP destekleyen başka bir istemciye bağlayabilirsiniz.
-
-Örneğin ajanınıza günlük çalışan bir görev verip şunları yaptırabilirsiniz:
+Kobaküs KWAP tek endpoint kullanıyor.
 
 ```text
-Bugünkü hesap hareketlerimi incele.
-Toplam gelen ve giden parayı çıkar.
-Dünkü ve son 7 günlük ortalamayla karşılaştır.
-Tekrarlayan veya alışılmadık harcamaları belirt.
-Bütçem açısından dikkat etmem gereken noktaları kısa şekilde yaz.
-Hiçbir finansal işlem yapma; yalnızca veriyi analiz et.
+POST https://app.kobakus.com/webservice/BankPaymentList.php
 ```
 
-Bu yapı özellikle kişisel finans takibi için uygundur: ajan veriyi okur, kategorize eder ve yorumlar; banka hesabında işlem gerçekleştiremez.
+Hesap ve bakiye için:
 
-## MCP araçları
+```text
+requestMethod=Accounts
+```
 
-| Tool | Açıklama |
-| --- | --- |
-| `bank_provider_status` | Bağlantı ve güvenli yapılandırma durumunu gösterir. Secret değerleri dönmez. |
-| `bank_list_accounts` | Rıza kapsamındaki hesapları listeler. |
-| `bank_get_balances` | Hesap bakiyelerini getirir. |
-| `bank_list_transactions` | Bir hesabın hareketlerini getirir. |
-| `bank_cashflow_summary` | Seçilen aralıkta gelen, giden ve net nakit akışını hesaplar. |
-| `bank_daily_cashflow` | Türkiye saat dilimini varsayarak tek günün nakit akışını özetler. |
-| `bank_monthly_cashflow` | Eski istemciler için geriye uyumlu nakit akışı tool'u. |
-| `bank_list_cards` | Rıza kapsamındaki kartları listeler. |
-| `bank_list_card_transactions` | Kart hareketlerini getirir. |
-| `bank_card_spending_summary` | Kart harcaması, iade ve net harcamayı özetler. |
+Hesap hareketleri için:
 
-Tüm tool'lar MCP metadata'sında `readOnlyHint: true` olarak işaretlenir.
+```text
+requestMethod=Transactions
+```
+
+Garanti BBVA Kobaküs tarafında AIS canlı olarak listeleniyor. Bakiye ve işlem okuma destekleniyor. Aynı bağlantı modeli diğer desteklenen bankalarda da kullanılıyor.
+
+TurkishBankMCP Kobaküsün ödeme API'sini kullanmaz. Sadece yukarıdaki iki read-only çağrıyı yapar.
+
+### Kobaküs ayarı
+
+`.env`:
+
+```dotenv
+BANK_PROVIDER=kobakus
+
+KOBAKUS_FIRM_CODE=
+KOBAKUS_CHANNEL_CODE=
+KOBAKUS_PASSWORD=
+```
+
+İstersen şifreyi `.env` içine koymak yerine dosyadan okutabilirsin.
+
+```dotenv
+KOBAKUS_PASSWORD_FILE=.secrets/kobakus-password
+```
+
+Kobaküs canlı erişimde `firmCode` `password` ve `channelCode` veriyor. Public dokümana göre canlı servis için IP tanımı da istenebiliyor.
+
+Sandbox ile önce bağlantıyı test etmek daha mantıklı.
+
+## Doğrudan ÖHVPS
+
+Yetkili YÖS/HBHS veya ÖHVPS uyumlu bir gateway erişimin varsa `ohvps` providerını kullanabilirsin.
+
+```dotenv
+BANK_PROVIDER=ohvps
+OHVPS_SPEC_VERSION=2.0.0
+
+OHVPS_BASE_URL=
+OHVPS_TPP_CODE=
+OHVPS_ASPSP_CODE=
+OHVPS_GATEWAY_TOKEN=
+OHVPS_ACCESS_TOKEN=
+```
+
+Bu yol daha düşük seviyeli. Sertifika rıza token ve kurum erişimi tarafını senin providerın çözmüş olmalı.
+
+Normal bir bireysel banka müşterisinin doğrudan BKM'den API key alması için yapılmış bir akış değil.
 
 ## Kurulum
 
-Node.js 22 veya üstü önerilir.
+Node.js 22 veya üstü.
 
 ```bash
 git clone git@github.com:OnurByte/TurkishBankMCP.git
@@ -79,18 +100,24 @@ npm install
 cp .env.example .env
 
 npm run check
-npm run inspect
+npm run build
 ```
 
-Varsayılan provider `mock` olduğu için banka erişim bilgisi olmadan MCP'yi çalıştırabilirsiniz.
+Banka bilgisi olmadan denemek için:
+
+```dotenv
+BANK_PROVIDER=mock
+```
+
+Sonra:
 
 ```bash
 npm start
 ```
 
-## Hermes Agent
+## Hermes
 
-Projeyi build ettikten sonra `~/.hermes/config.yaml` içine ekleyebilirsiniz:
+Build aldıktan sonra Hermes configine ekle.
 
 ```yaml
 mcp_servers:
@@ -98,108 +125,95 @@ mcp_servers:
     command: "node"
     args:
       - "/absolute/path/to/TurkishBankMCP/dist/index.js"
-    tools:
-      include:
-        - bank_provider_status
-        - bank_list_accounts
-        - bank_get_balances
-        - bank_list_transactions
-        - bank_cashflow_summary
-        - bank_daily_cashflow
-        - bank_list_cards
-        - bank_list_card_transactions
-        - bank_card_spending_summary
 ```
 
-Secret'ları MCP argümanı olarak vermek gerekmez. TurkishBankMCP kendi `.env` dosyasını okuyabilir veya Hermes'in `~/.hermes/.env` dosyasındaki değişkenler `config.yaml` üzerinden aktarılabilir.
+Sonra Hermes'e mesela şunu diyebilirsin:
 
-## Üretim yapılandırması
-
-ÖHVPS uyumlu gerçek bir provider/aggregator erişiminiz varsa:
-
-```dotenv
-BANK_PROVIDER=ohvps
-OHVPS_SPEC_VERSION=2.0.0
-
-OHVPS_BASE_URL=https://provider.example/ohvps/hbh/s2.0
-OHVPS_TPP_CODE=0000
-OHVPS_ASPSP_CODE=0000
-
-OHVPS_GATEWAY_TOKEN=
-OHVPS_ACCESS_TOKEN=
-
-# Token'ları env yerine dosyadan okutmak isterseniz:
-OHVPS_GATEWAY_TOKEN_FILE=
-OHVPS_ACCESS_TOKEN_FILE=
-OHVPS_PSU_FRAUD_CHECK_FILE=
-
-OHVPS_GROUP_ID=
-OHVPS_PSU_FRAUD_CHECK=
-
-HTTP_TIMEOUT_MS=12000
-HTTP_MAX_RETRIES=2
-HTTP_RETRY_BASE_MS=500
-HTTP_MAX_RETRY_WAIT_MS=5000
-
-# "off" verilirse disk cache kapatılır.
-CACHE_FILE=.data/cache.json
+```text
+Her gün akşam hesap hareketlerime bak.
+Bugün toplam ne kadar para geldi ne kadar çıktı söyle.
+Son 7 günle kıyasla.
+Dikkat çeken harcamaları yaz.
+Bana kısa bir bütçe özeti çıkar.
+Hiçbir finansal işlem yapma.
 ```
 
-Secret dosyaları göreli verilirse proje kök dizinine göre çözülür. Token dosyası tanımlanmışsa her istek öncesinde yeniden okunur; bu sayede token rotasyonu için MCP sürecini yeniden başlatmak gerekmez.
+Cron tarafını Hermes veya kullandığın agent runtime yönetir. MCP sadece veriyi okur.
 
-### API limitleri
+## MCP tool'ları
 
-ÖHVPS otomatik sorgular için minimum desteklenmesi gereken limitler tanımlar. Bireysel hesaplarda örneğin hesap listesi günde 4, bakiye günde 24, hesap hareketleri günde 4 ve kart hareketleri günde 32 sorgu seviyesindedir.
+```text
+bank_provider_status
+bank_list_accounts
+bank_get_balances
+bank_list_transactions
+bank_cashflow_summary
+bank_daily_cashflow
+bank_monthly_cashflow
+bank_list_cards
+bank_list_card_transactions
+bank_card_spending_summary
+```
 
-TurkishBankMCP bu yüzden:
+Bütün tool'lar read-only olarak işaretli.
 
-- hesap listesini 6 saat,
-- bakiyeyi 1 saat,
-- aynı hesap hareketi sorgusunu 6 saat,
-- kart listesini 6 saat,
-- aynı kart hareketi sorgusunu 45 dakika
+Kobaküs kullanırken ilk 7 tool çalışır. Kartla ilgili son 3 tool public KWAP sözleşmesinde kart endpointi olmadığı için açık hata döner.
 
-önbellekte tutar.
+Doğrudan ÖHVPS providerında kart tool'ları da kullanılabilir.
 
-Cache dosyası process restart sonrasında da korunur ve `0600` izinleriyle yazılmaya çalışılır. Cache banka verisi içerdiği için `.gitignore` kapsamındadır ve paylaşılmamalıdır.
+## Kobaküs tarafında yaptığımız şey
 
-429 yanıtlarında `X-RateLimit-Reset` / `Retry-After` dikkate alınır. Uzun bir bekleme gerekiyorsa MCP çağrısı saatlerce açık tutulmaz; ajan tekrar denemek üzere hata alır.
+Kobaküs public API referansı işlem sorgularında varsayılan olarak 1000 kayıt döndüğünü ve sorguların küçük tarih aralıklarıyla yapılmasını öneriyor.
+
+TurkishBankMCP uzun tarih aralıklarını kendi içinde 7 günlük parçalara böler. Sonuçları tek liste haline getirir. Aynı sorguları gereksiz yere tekrar atmamak için disk cache kullanır.
+
+Bir istek 1000 kayda dayanırsa sonuçta uyarı verir. Böylece eksik hareket varmış gibi sessizce davranmaz.
+
+Kobaküs public dokümanı transaction response alanlarının tam listesini yayınlamıyor. Provider bu yüzden bilinen standart alan adlarını normalize eder. Canlı response güvenli şekilde eşleşmezse yanlış nakit akışı hesaplamak yerine hata verir ve gördüğü alan adlarını söyler. Değerleri veya API şifresini hata mesajına koymaz.
+
+## ÖHVPS limitleri
+
+Doğrudan ÖHVPS providerında sorgu limitlerini korumak için kalıcı cache var.
+
+Hesap listesi ve işlem sorguları gereksiz yere tekrar bankaya gitmez. 429 ve geçici 5xx cevaplarında kontrollü retry yapılır.
+
+Cache dosyası varsayılan olarak:
+
+```text
+.data/cache.json
+```
+
+Bu dosya banka verisi içerir ve git'e eklenmez.
 
 ## Docker
 
 ```bash
 docker build -t turkish-bank-mcp .
+
 docker run --rm -i \
   --env-file .env \
   -v "$PWD/.data:/app/.data" \
   turkish-bank-mcp
 ```
 
-MCP stdio kullandığı için container `-i` ile çalıştırılmalıdır.
-
 ## Güvenlik
 
-- `.env`, token dosyaları ve `.data` Git'e eklenmez.
-- MCP tool çıktılarında credential/token bulunmaz.
-- Ödeme veya transfer tool'u yoktur.
-- HTTP hata mesajları header/token içeriğini loglamaz.
-- Disk cache finansal veri içerdiği için hassas kabul edilmelidir.
-- Ajanınıza ayrıca sınırsız shell/filesystem erişimi verdiyseniz bu ayrı bir güvenlik sınırıdır; MCP'nin read-only olması o yetkileri kısıtlamaz.
+`.env` git'e girmez.
 
-Daha ayrıntılı notlar için [SECURITY.md](SECURITY.md) dosyasına bakın.
+`.secrets` git'e girmez.
 
-## Production sınırı
+MCP cevaplarında API şifresi token veya credential dönmez.
 
-Bu repo çalışan bir MCP sunucusu ve ÖHVPS hesap/kart bilgi adapter'ıdır; fakat **YÖS/HBHS lisansı, BKM teknik sertifikasyonu veya müşteri rızası sürecinin yerine geçmez**. Gerçek banka verisine ulaşmak için yetkili bir üretim bağlantısı gerekir.
+TurkishBankMCP içinde ödeme transfer veya satın alma tool'u yok.
 
-Doğrudan ÖHVPS katılımcısıysanız kurumunuza ait sertifika, kimlik doğrulama, rıza/GKD ve erişim belirteci yaşam döngüsünü kendi altyapınız veya yetkili gateway'iniz sağlamalıdır. TurkishBankMCP bu katmandan aldığı read-only erişim bilgilerini MCP'ye dönüştürür.
+Aynı makinede Hermes'e sınırsız shell ve filesystem yetkisi verirsen o ayrı konu. Böyle bir ajan teorik olarak `.env` dosyasını kendi shell tool'u üzerinden okuyabilir. MCP'nin read-only olması başka tool'ların yetkisini kısıtlamaz.
 
 ## Kaynaklar
 
-- [ÖHVPS API İlke ve Kuralları](https://ohvps.github.io/)
-- [TCMB - Açık Bankacılık Hizmetlerinin Yeni Özellikleri, 17 Mart 2026](https://www.tcmb.gov.tr/wps/wcm/connect/tr/tcmb%2Btr/main%2Bmenu/duyurular/basin/2026/duy2026-13)
-- [Model Context Protocol](https://modelcontextprotocol.io/)
-- [Hermes Agent MCP dokümantasyonu](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/features/mcp.md)
+- Kobaküs KWAP API: https://kobakus.com/en/api-dokumantasyon/
+- Kobaküs geliştirici sayfası: https://kobakus.com/gelistiriciler/
+- Garanti BBVA + Kobaküs: https://kobakus.com/bankalar/garanti-bbva/
+- ÖHVPS: https://ohvps.github.io/v2.0.0/
 
 ## Lisans
 
