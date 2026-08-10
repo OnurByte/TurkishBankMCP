@@ -8,8 +8,7 @@ const provider = createProvider();
 
 function jsonResult(value: unknown) {
   return {
-    content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }],
-    structuredContent: value && typeof value === "object" ? value as Record<string, unknown> : undefined
+    content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }]
   };
 }
 
@@ -28,6 +27,7 @@ function createServer(): McpServer {
     "bank_provider_status",
     {
       description: "Show TurkishBankMCP provider status and whether required credentials are present. Never returns secret values.",
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
       inputSchema: z.object({})
     },
     async () => jsonResult(provider.status())
@@ -37,6 +37,7 @@ function createServer(): McpServer {
     "bank_list_accounts",
     {
       description: "List bank accounts visible under the active ÖHVPS consent. Read-only.",
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
       inputSchema: z.object({
         page: z.number().int().positive().optional(),
         pageSize: z.number().int().min(1).max(100).optional()
@@ -52,6 +53,7 @@ function createServer(): McpServer {
     "bank_get_balances",
     {
       description: "Get current balances for accounts visible under the active ÖHVPS consent. Read-only.",
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
       inputSchema: z.object({
         page: z.number().int().positive().optional(),
         pageSize: z.number().int().min(1).max(100).optional()
@@ -67,6 +69,7 @@ function createServer(): McpServer {
     "bank_list_transactions",
     {
       description: "List account transactions. A=credit/incoming, B=debit/outgoing. User-triggered windows are capped at one month; system-triggered windows at 24 hours.",
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
       inputSchema: z.object({
         accountRef: z.string().min(1),
         from: z.string().min(1).describe("ISO date-time or date accepted by the provider"),
@@ -89,6 +92,7 @@ function createServer(): McpServer {
     "bank_monthly_cashflow",
     {
       description: "Summarize incoming money, outgoing money and net cashflow by currency from one account. No FX conversion is performed.",
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
       inputSchema: z.object({
         accountRef: z.string().min(1),
         from: z.string().min(1),
@@ -110,6 +114,7 @@ function createServer(): McpServer {
     "bank_list_cards",
     {
       description: "List debit, credit, prepaid or virtual cards visible under the active ÖHVPS consent. Read-only.",
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
       inputSchema: z.object({
         page: z.number().int().positive().optional(),
         pageSize: z.number().int().min(1).max(100).optional()
@@ -125,6 +130,7 @@ function createServer(): McpServer {
     "bank_list_card_transactions",
     {
       description: "List card movements. B=card debit/spend, A=credit/refund, N=non-financial. period supports 99 or -12..18; actual allowed values depend on card type.",
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
       inputSchema: z.object({
         cardRef: z.string().min(1),
         period: z.number().int().min(-12).max(99),
@@ -145,6 +151,7 @@ function createServer(): McpServer {
     "bank_card_spending_summary",
     {
       description: "Summarize card spending and credits by currency for an ÖHVPS card statement period. No FX conversion is performed.",
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
       inputSchema: z.object({
         cardRef: z.string().min(1),
         period: z.number().int().min(-12).max(99),
