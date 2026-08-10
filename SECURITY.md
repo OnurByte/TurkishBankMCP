@@ -1,45 +1,64 @@
 # Security
 
-TurkishBankMCP is intentionally read-only.
+TurkishBankMCP is intentionally read-only
 
-## MCP surface
+The runtime only exposes Garanti Account Information and Account Transactions access
 
-The server does not expose payment initiation, transfer, card-management, consent-deletion or credential-management tools.
+There are no payment transfer EFT card management purchase or credential management MCP tools
 
-The Kobaküs provider only calls `requestMethod=Accounts` and `requestMethod=Transactions`.
+## Garanti app permissions
 
-The direct ÖHVPS provider only uses account/card information endpoints. Payment initiation endpoints from the wider ÖHVPS standard are outside this project.
+Create a dedicated Garanti Developer Portal application for TurkishBankMCP
+
+Subscribe that application only to
+
+- Account Information
+- Account Transactions
+
+Do not add Bulk Transfer Direct Collection Account Payment or other write capable products to the same application
+
+This is the strongest production boundary because the OAuth credential itself is limited to the two read-only products
+
+## Endpoint guard
+
+The configured account endpoints must use HTTPS
+
+TurkishBankMCP also refuses configured endpoint URLs containing obvious write-capable terms such as transfer payment EFT direct collection loan or card management
+
+This denylist is defense in depth and does not replace correct Garanti application permissions
 
 ## Secrets
 
-- Never commit `.env`, token files, `.secrets/` or `secrets/`.
-- `bank_provider_status` only reports whether credentials exist. It never returns secret values.
-- Kobaküs passwords can be read from `KOBAKUS_PASSWORD_FILE`.
-- ÖHVPS tokens can be read from rotating secret files.
-- Request bodies, passwords and access tokens are never included in MCP errors.
+Never commit `.env` `.secrets` or production payloads
 
-## Cache data
+`GARANTI_CLIENT_SECRET_FILE` can be used instead of putting the client secret directly in `.env`
 
-Persistent cache is enabled by default at `.data/cache.json`.
+The access token is held in memory and refreshed automatically
 
-The cache can contain account balances and transaction data. Treat it as sensitive financial data. The cache is ignored by Git and TurkishBankMCP tries to write it with `0600` permissions on POSIX systems.
+Neither client secret nor access token is returned by MCP tools
 
-Set `CACHE_FILE=off` if you do not want data persisted to disk.
+Authorization headers are not accepted through `GARANTI_EXTRA_HEADERS_JSON` so they cannot override the provider OAuth flow
+
+## Errors
+
+Errors only return a short public message from the provider when available
+
+Request headers client secrets and access tokens are not included in MCP errors
+
+429 and temporary 5xx responses use bounded retry behavior
+
+A 401 invalidates the cached token and performs one token refresh
 
 ## Agent boundary
 
-A read-only MCP does not protect secrets from some other tool that has unrestricted shell or filesystem access.
+Read-only MCP permissions do not restrict some other tool that has unrestricted shell filesystem or process access
 
-If Hermes or another agent can read every file on the host then it may also be able to read `.env`. Run TurkishBankMCP under a separate OS user or container if you want a harder boundary.
+If the agent can read every file on the machine then it may also be able to read `.env` or `.secrets`
 
-## Production access
-
-For Kobaküs use a separate KWAP service credential. Do not use your normal panel password. Follow Kobaküs IP allow-listing and live onboarding requirements.
-
-For direct ÖHVPS access this repository does not grant YÖS/HBHS status and does not bypass customer consent or BKM/TCMB requirements. Production access must come from an authorized participant or compatible provider.
+Use a separate OS user or container when you need a harder boundary
 
 ## Reporting
 
-Do not open a public issue with bank credentials, tokens, IBANs, account data or production request/response payloads.
+Do not put client credentials tokens IBANs account numbers or real bank payloads in public issues
 
-Remove sensitive values before sharing logs.
+Sanitize logs and examples before sharing them
