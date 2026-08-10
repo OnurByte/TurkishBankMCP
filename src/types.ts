@@ -29,11 +29,10 @@ export interface BankProvider {
   readonly name: string;
   readonly specVersion: string;
   status(): Record<string, unknown>;
+  testConnection(): Promise<unknown>;
   listAccounts(options?: PageOptions): Promise<unknown>;
   getBalances(options?: PageOptions): Promise<unknown>;
   listTransactions(query: TransactionQuery): Promise<unknown>;
-  listCards(options?: PageOptions): Promise<unknown>;
-  listCardTransactions(query: CardTransactionQuery): Promise<unknown>;
 }
 
 export interface NormalizedTransaction {
