@@ -217,7 +217,7 @@ export class GarantiProvider implements BankProvider {
     const response = await fetch(cfg.tokenUrl, {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
-      body: form,
+      body: form.toString(),
       signal: AbortSignal.timeout(appConfig.httpTimeoutMs)
     });
     const body = await parseBody(response);

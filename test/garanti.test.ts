@@ -23,12 +23,17 @@ test("Garanti provider gets OAuth token and never returns it", async () => {
   });
 
   const originalFetch = globalThis.fetch;
-  const calls: Array<{ url: string; authorization?: string }> = [];
+  const calls: Array<{ url: string; authorization?: string; contentType?: string; body?: string }> = [];
 
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input);
     const headers = new Headers(init?.headers);
-    calls.push({ url, authorization: headers.get("authorization") ?? undefined });
+    calls.push({
+      url,
+      authorization: headers.get("authorization") ?? undefined,
+      contentType: headers.get("content-type") ?? undefined,
+      body: typeof init?.body === "string" ? init.body : undefined
+    });
 
     if (url.includes("/auth/oauth/v2/token")) {
       return new Response(JSON.stringify({ access_token: "super-secret-token", expires_in: 300 }), {
@@ -48,6 +53,16 @@ test("Garanti provider gets OAuth token and never returns it", async () => {
     const connection = await provider.testConnection();
     assert.deepEqual(connection, { provider: "garanti-api-store", oauth: "ok", readOnly: true });
     assert.equal(JSON.stringify(connection).includes("super-secret-token"), false);
+
+    const tokenCall = calls.find((call) => call.url.includes("/auth/oauth/v2/token"));
+    assert.ok(tokenCall);
+    assert.equal(tokenCall.contentType, "application/x-www-form-urlencoded");
+    assert.deepEqual(Object.fromEntries(new URLSearchParams(tokenCall.body)), {
+      grant_type: "client_credentials",
+      client_id: "client-id",
+      client_secret: "client-secret",
+      redirect_uri: "https://example.test/callback"
+    });
 
     const result = await provider.listTransactions({
       accountRef: "TR 12/34",
