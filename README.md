@@ -1,20 +1,29 @@
 # TurkishBankMCP
 
-TurkishBankMCP tamamen açık kaynak ve MIT lisanslı bir proje
+> Garanti BBVA API Store ile çalışan, yapay zekâ ajanlarına **salt-okunur hesap ve hareket verisi erişimi** veren güvenli bir Model Context Protocol (MCP) sunucusu.
 
-Şu an sadece Garanti BBVA için hazır
+TurkishBankMCP, finansal veriyi bir sohbet kutusuna kopyalayan geçici bir script değil; OAuth 2.0, token yaşam döngüsü, hata toleransı ve açık güvenlik sınırları olan küçük ama gerçek bir entegrasyon katmanı.
 
-Başka banka kullanıyorsan kendi providerını ekleyebilirsin
+Şu an Garanti BBVA için hazır. Başka banka kullanıyorsan aynı `BankProvider` sözleşmesiyle kendi providerını ekleyebilirsin.
 
-Arada Kobaküs yok başka aggregator yok direkt Garanti
+## Neden güçlü bir portföy projesi?
 
-Amaç basit
+- **Gerçek dünya entegrasyonu:** Herkesin yaptığı bir CRUD uygulaması yerine OAuth korumalı, hassas veri taşıyan bir banka API’siyle çalışır.
+- **AI ajanları için tasarlandı:** Hermes, OpenClaw ve diğer MCP istemcileri standart araç çağrılarıyla hesap bilgisi ve hareketleri analiz edebilir.
+- **Arada aggregator yok:** Kobaküs veya başka bir aracı yerine doğrudan Garanti API Store’a bağlanır; mimari ve veri akışı okunabilir kalır.
+- **Güvenlik varsayılanı:** Para gönderme, ödeme, EFT, kart yönetimi veya satın alma araçları yoktur. Endpoint denylist’i ödeme/transfer sınıfı URL’leri reddeder.
+- **Üretim kaygısı taşıyor:** Tokenlar MCP yanıtlarına girmez; 401 sonrası tek yenileme, 429/geçici 5xx için sınırlı retry, timeout ve secret-file desteği vardır.
+- **Denetlenebilir:** TypeScript ile yazılmıştır, MCP tool şemaları açıktır, test/typecheck/build kontrolleri projede bulunur ve lisansı MIT’tir.
 
-Hermes OpenClaw veya başka bir MCP istemcisi hesap bilgini ve hesap hareketlerini okuyabilsin
+Bu repo Garanti BBVA’nın resmi ürünü olduğunu iddia etmez. Canlı erişim, Garanti Developer Portal’daki uygulama ve API onayına bağlıdır; proje bu resmi erişimi güvenli, agent-uyumlu ve salt-okunur biçimde kullanır.
 
-Para gönderme ödeme başlatma EFT kart yönetme satın alma gibi şeyler yok
+## Ne yapar, ne yapmaz?
 
-Kodda bunlara ait tool da yok
+Hermes, OpenClaw veya başka bir MCP istemcisi hesap bilgini ve hesap hareketlerini okuyabilir; örneğin günlük nakit akışını özetleyebilir, gelen/giden tutarları ayırabilir ve tekrarlayan harcamaları inceleyebilir.
+
+Para gönderme, ödeme başlatma, EFT, kart yönetme veya satın alma yapmaz.
+
+Kodda bu işlemlere ait tool da yoktur.
 
 ## Garanti tarafında ne lazım
 
